@@ -125,3 +125,32 @@ The project uses Alembic with async SQLAlchemy and Docker Compose for PostgreSQL
 - **DATABASE_URL**: Full connection string used by Alembic and SQLAlchemy
 
 The PostgreSQL container uses a persistent volume (`pgdata`) to retain data between container restarts. Alembic is configured to automatically load the `DATABASE_URL` from environment variables.
+
+## Cabo Game Rules
+
+### Game Setup
+- Players start with 4 cards facedown, and can choose two of them to view.
+- An arbitrary player is chosen to start the game, and play continues clockwise.
+
+### Gameplay
+- At the start of a player's turn, they draw a card from the deck.
+- They can either play that card, or replace one of their facedown cards with it, and then play the facedown card.
+- Some cards have special effects that trigger upon being played.
+- Once a card has been played, other players can call STACK.
+  - The player who called STACK can then choose one of their cards to play. If the card matches the rank of the played card, they successfully stack (discard the played card). If the card does not match, the player keeps their chosen card and must draw a card.
+  - A player can also call STACK on an opponent's card. If the card matches the rank of the played card, the opponent's card is discarded, and the player who called STACK can choose one of their cards to give to the opponent.
+- Before drawing a card, a player can choose to call "Cabo"
+  - That player does not take a turn, and their cards cannot be affected by STACK or any other card effects until the game ends.
+  - One more round is played, and once play returns to the player who called Cabo, the game ends.
+
+### Special Card Effects
+- 7/8: You can choose one of your facedown cards to view.
+- 9/10: You can choose another player's facedown card to view.
+- J/Q: You can swap one of your facedown cards with another player's facedown card.
+- K: You can look at any card on the board, and can then choose to swap it with one of your facedown cards.
+
+
+### Scoring
+- The player with the lowest sum of card values wins.
+- Aces are worth 1 point, 2s are worth 2 points, 3s are worth 3 points, etc.
+- Red Kings are worth -1 point, and Jokers are worth 0 points.
