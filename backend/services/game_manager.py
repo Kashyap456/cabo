@@ -393,7 +393,10 @@ class CaboGame:
                 if result.get("success", False):
                     # Add any generated events
                     if "event" in result:
-                        events.append(result["event"])
+                        event = result["event"]
+                        events.append(event)
+                        # Actually broadcast the event
+                        self._broadcast_event(event.event_type, event.data)
                     # Add any follow-up messages
                     if "next_messages" in result:
                         for next_msg in result["next_messages"]:
@@ -710,7 +713,11 @@ class CaboGame:
         
         # Move to next player
         self.state.current_player_index = (self.state.current_player_index + 1) % len(self.players)
-        self.state.phase = GamePhase.PLAYING
+        
+        # Preserve CABO_CALLED phase if we're in final round
+        if self.state.phase != GamePhase.CABO_CALLED:
+            self.state.phase = GamePhase.PLAYING
+            
         self.state.drawn_card = None
         self.state.played_card = None
         
