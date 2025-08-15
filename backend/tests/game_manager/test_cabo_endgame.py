@@ -419,7 +419,8 @@ class TestEndGameConditions:
         bob_id = game.players[1].player_id
         game.add_message(DrawCardMessage(player_id=bob_id))
         game.add_message(PlayDrawnCardMessage(player_id=bob_id))
-        events = process_messages_and_get_events(game)
+        process_messages_and_get_events(game)
+        advance_turn_if_needed(game)
 
         # Game should end after Bob's turn
         assert_game_phase(game, GamePhase.ENDED)

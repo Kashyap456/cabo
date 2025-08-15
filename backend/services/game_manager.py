@@ -699,6 +699,9 @@ class CaboGame:
         if self.state.drawn_card is not None:
             return {"success": False, "error": "Cannot call Cabo after drawing a card"}
 
+        if self.is_cabo_called():
+            return {"success": False, "error": "Cabo already called"}
+
         current_player.has_called_cabo = True
         self.state.cabo_caller = message.player_id
         self.state.final_round_started = True
