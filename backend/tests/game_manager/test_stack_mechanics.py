@@ -12,7 +12,7 @@ from .utils import (
     force_game_phase, set_current_player, replace_game_deck,
     assert_player_hand_size, assert_player_has_card, assert_game_phase,
     assert_current_player, assert_discard_top, assert_event_generated,
-    process_messages_and_get_events, MATCHING_PAIR, NON_MATCHING_PAIR
+    process_messages_and_get_events, MATCHING_PAIR, NON_MATCHING_PAIR, assert_turn_advances_to
 )
 
 
@@ -337,7 +337,7 @@ class TestStackTimeout:
         process_messages_and_get_events(game)
         
         # Should advance to next player (Bob in this case, since Alice was current)
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
     
     def test_timeout_when_not_in_stack_phase_ignored(self):
         """Test timeout message is ignored when not in STACK phase"""
@@ -388,8 +388,8 @@ class TestStackIntegrationWithTurns:
         ))
         process_messages_and_get_events(game)
         
-        # Turn should advance to Charlie (index 2)
-        assert_current_player(game, 1)  # Actually advances to Bob since Alice was current
+        # Turn should advance to Bob (index 1) since Alice was current
+        assert_turn_advances_to(game, 1)
     
     def test_failed_stack_advances_turn_normally(self):
         """Test failed stack advances turn normally after completion"""
@@ -422,7 +422,7 @@ class TestStackIntegrationWithTurns:
         process_messages_and_get_events(game)
         
         # Turn should still advance normally
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
 
 
 class TestStackStateClearing:

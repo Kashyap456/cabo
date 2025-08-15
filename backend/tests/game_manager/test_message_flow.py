@@ -13,7 +13,7 @@ from .utils import (
     set_current_player, force_game_phase, replace_game_deck,
     deal_specific_cards, set_played_card,
     assert_game_phase, assert_current_player, assert_event_generated,
-    process_messages_and_get_events
+    process_messages_and_get_events, assert_turn_advances_to
 )
 
 
@@ -102,7 +102,7 @@ class TestMessageProcessing:
         events = process_messages_and_get_events(game)
         
         # Now turn should have advanced
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
 
 
 class TestEventGeneration:
@@ -377,7 +377,7 @@ class TestTimeoutProcessing:
         events = process_messages_and_get_events(game)
         
         # Should have advanced turn and cleared timer
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
         assert_game_phase(game, GamePhase.PLAYING)
         assert game.state.turn_transition_timer_id is None
 

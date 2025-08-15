@@ -12,7 +12,7 @@ from .utils import (
     force_game_phase, set_drawn_card, replace_game_deck,
     assert_player_hand_size, assert_game_phase, assert_current_player,
     assert_event_generated, process_messages_and_get_events,
-    SCORING_CARDS
+    SCORING_CARDS, assert_turn_advances_to
 )
 
 
@@ -97,7 +97,7 @@ class TestCaboCallling:
         events = process_messages_and_get_events(game)
         
         # Turn should advance to Bob
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
     
     def test_can_call_cabo_from_waiting_for_special_action_phase(self):
         """Test can call Cabo from waiting for special action phase"""
@@ -134,7 +134,7 @@ class TestFinalRound:
         process_messages_and_get_events(game)
         
         # Should advance to Bob's turn
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
         assert_game_phase(game, GamePhase.CABO_CALLED)
         
         # Bob can play normally
@@ -147,7 +147,7 @@ class TestFinalRound:
         events = process_messages_and_get_events(game)
         
         # Should advance to Charlie
-        assert_current_player(game, 2)
+        assert_turn_advances_to(game, 2)
         assert_game_phase(game, GamePhase.CABO_CALLED)
     
     def test_game_ends_when_turn_returns_to_cabo_caller(self):
@@ -354,7 +354,7 @@ class TestEndGameConditions:
         
         # Alice calls Cabo
         setup_cabo_scenario(game, 0)
-        assert_current_player(game, 1)  # Should be Bob's turn
+        assert_turn_advances_to(game, 1)  # Should be Bob's turn
         
         # Play through partial final round
         normal_cards = [
@@ -372,7 +372,7 @@ class TestEndGameConditions:
         
         # Should still be in Cabo phase, not ended
         assert_game_phase(game, GamePhase.CABO_CALLED)
-        assert_current_player(game, 2)  # Charlie's turn
+        assert_turn_advances_to(game, 2)  # Charlie's turn
         
         # Charlie's turn
         charlie_id = game.players[2].player_id
@@ -382,7 +382,7 @@ class TestEndGameConditions:
         
         # Should still be in Cabo phase
         assert_game_phase(game, GamePhase.CABO_CALLED)
-        assert_current_player(game, 3)  # Dave's turn
+        assert_turn_advances_to(game, 3)  # Dave's turn
         
         # Dave's turn
         dave_id = game.players[3].player_id

@@ -14,7 +14,7 @@ from .utils import (
     set_current_player, force_game_phase, replace_game_deck,
     deal_specific_cards, set_played_card, set_drawn_card,
     assert_game_phase, assert_current_player, assert_player_hand_size,
-    process_messages_and_get_events
+    process_messages_and_get_events, assert_turn_advances_to
 )
 
 
@@ -600,7 +600,7 @@ class TestBoundaryConditions:
             process_messages_and_get_events(game)
         
         # Should wrap around to first player
-        assert_current_player(game, 0)
+        assert_turn_advances_to(game, 0)
     
     def test_zero_point_hands(self):
         """Test hands that sum to zero points"""

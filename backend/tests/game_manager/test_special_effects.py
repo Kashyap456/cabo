@@ -14,7 +14,8 @@ from .utils import (
     force_game_phase, replace_game_deck,
     assert_player_hand_size, assert_player_has_card, assert_card_is_known,
     assert_game_phase, assert_current_player, assert_event_generated,
-    process_messages_and_get_events, SPECIAL_CARDS
+    process_messages_and_get_events, advance_turn_if_needed, assert_turn_advances_to,
+    SPECIAL_CARDS
 )
 
 
@@ -71,7 +72,7 @@ class TestViewOwnCardEffect:
         assert_card_is_known(game, 0, 2, True)
         
         # Check turn advanced
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
         assert_game_phase(game, GamePhase.PLAYING)
     
     def test_view_own_card_reveals_correct_card(self):
@@ -180,7 +181,7 @@ class TestViewOpponentCardEffect:
         assert_card_is_known(game, 1, 2, False)
         
         # Turn should advance
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
         assert_game_phase(game, GamePhase.PLAYING)
     
     def test_cannot_view_own_card_with_opponent_effect(self):
@@ -291,7 +292,7 @@ class TestSwapCardsEffect:
         assert_card_is_known(game, 1, 0, False)
         
         # Turn should advance
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
         assert_game_phase(game, GamePhase.PLAYING)
     
     def test_cannot_swap_with_yourself(self):
@@ -394,8 +395,8 @@ class TestKingEffect:
         
         # Should transition to swap phase
         assert_game_phase(game, GamePhase.KING_SWAP_PHASE)
-        assert game.state.king_viewed_card_player == alice_id
-        assert game.state.king_viewed_card_index == 2
+        assert game.state.king_viewed_player == alice_id
+        assert game.state.king_viewed_index == 2
         
         # Card should be marked as known
         assert_card_is_known(game, 0, 2, True)
@@ -432,8 +433,8 @@ class TestKingEffect:
         
         # Should transition to swap phase
         assert_game_phase(game, GamePhase.KING_SWAP_PHASE)
-        assert game.state.king_viewed_card_player == bob_id
-        assert game.state.king_viewed_card_index == 1
+        assert game.state.king_viewed_player == bob_id
+        assert game.state.king_viewed_index == 1
         
         # Opponent's card should not be marked as known to them
         assert_card_is_known(game, 1, 1, False)
@@ -483,9 +484,9 @@ class TestKingEffect:
         # Alice's new card should be known
         assert_card_is_known(game, 0, 0, True)
         
-        # Turn should advance
-        assert_current_player(game, 1)
+        # Should be in turn transition, then advance
         assert_game_phase(game, GamePhase.TURN_TRANSITION)
+        assert_turn_advances_to(game, 1)
     
     def test_king_skip_swap_advances_turn(self):
         """Test King can skip swap and advance turn"""
@@ -510,13 +511,13 @@ class TestKingEffect:
         game.add_message(KingSkipSwapMessage(player_id=alice_id))
         events = process_messages_and_get_events(game)
         
-        # Turn should advance
-        assert_current_player(game, 1)
+        # Should be in turn transition, then advance
         assert_game_phase(game, GamePhase.TURN_TRANSITION)
+        assert_turn_advances_to(game, 1)
         
         # King state should be cleared
-        assert game.state.king_viewed_card_player is None
-        assert game.state.king_viewed_card_index is None
+        assert game.state.king_viewed_player is None
+        assert game.state.king_viewed_index is None
     
     def test_cannot_king_view_invalid_card_index(self):
         """Test cannot view card at invalid index during King effect"""
@@ -582,7 +583,7 @@ class TestSpecialActionTimeout:
         events = process_messages_and_get_events(game)
         
         # Should advance turn and clear special action state
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
         assert_game_phase(game, GamePhase.PLAYING)
         assert game.state.special_action_player is None
         assert game.state.special_action_type is None
@@ -639,7 +640,7 @@ class TestSpecialCardIdentification:
             events = process_messages_and_get_events(game)
             
             # Should advance turn normally, no special action
-            assert_current_player(game, 1)
+            assert_turn_advances_to(game, 1)
             assert_game_phase(game, GamePhase.PLAYING)
             assert game.state.special_action_player is None
     
@@ -772,7 +773,7 @@ class TestTurnTransitionTimeout:
         events = process_messages_and_get_events(game)
         
         # Turn should advance
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
         assert_game_phase(game, GamePhase.PLAYING)
         
         # Timer should be cleared

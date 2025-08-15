@@ -160,6 +160,60 @@ def assert_current_player(game: CaboGame, expected_player_index: int):
         f"Current player is {game.state.current_player_index}, expected {expected_player_index}"
 
 
+def advance_turn_if_needed(game: CaboGame):
+    """Advance turn if the game is in a turn transition state"""
+    from services.game_manager import GamePhase, TurnTransitionTimeoutMessage
+    
+    if game.state.phase == GamePhase.TURN_TRANSITION:
+        # Trigger the timeout to advance the turn
+        game.add_message(TurnTransitionTimeoutMessage())
+        process_messages_and_get_events(game)
+
+
+def complete_turn(game: CaboGame, player_id: str, card_actions=None):
+    """
+    Complete a full turn for a player, handling any turn transition logic.
+    
+    Args:
+        game: The game instance
+        player_id: The player taking the turn
+        card_actions: List of card actions to perform (e.g., [DrawCardMessage, PlayDrawnCardMessage])
+    
+    Returns:
+        List of events generated during the turn
+    """
+    from services.game_manager import DrawCardMessage, PlayDrawnCardMessage
+    
+    all_events = []
+    
+    # If no specific actions provided, do a standard draw-and-play turn
+    if card_actions is None:
+        card_actions = [
+            DrawCardMessage(player_id=player_id),
+            PlayDrawnCardMessage(player_id=player_id)
+        ]
+    
+    # Execute the actions
+    for action in card_actions:
+        game.add_message(action)
+        events = process_messages_and_get_events(game)
+        all_events.extend(events)
+    
+    # Handle any turn transition
+    advance_turn_if_needed(game)
+    
+    return all_events
+
+
+def assert_turn_advances_to(game: CaboGame, expected_player_index: int):
+    """
+    Assert that after handling any turn transition logic, 
+    the turn advances to the expected player.
+    """
+    advance_turn_if_needed(game)
+    assert_current_player(game, expected_player_index)
+
+
 def assert_discard_top(game: CaboGame, expected_card: Card):
     """Assert the top of discard pile is the expected card"""
     assert game.discard_pile, "Discard pile is empty"

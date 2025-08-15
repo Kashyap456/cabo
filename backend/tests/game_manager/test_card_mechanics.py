@@ -11,7 +11,7 @@ from .utils import (
     set_current_player, replace_game_deck, create_deck_with_specific_top_cards,
     assert_player_hand_size, assert_player_has_card, assert_card_is_known,
     assert_game_phase, assert_current_player, assert_discard_top,
-    assert_event_generated, process_messages_and_get_events
+    assert_event_generated, process_messages_and_get_events, assert_turn_advances_to
 )
 
 
@@ -153,7 +153,7 @@ class TestPlayingDrawnCard:
         events = process_messages_and_get_events(game)
         
         # Should advance to Bob's turn
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
     
     def test_playing_special_card_waits_for_action(self):
         """Test playing a special card waits for special action"""
@@ -284,21 +284,21 @@ class TestTurnProgression:
         game.add_message(PlayDrawnCardMessage(player_id=game.players[0].player_id))
         process_messages_and_get_events(game)
         
-        assert_current_player(game, 1)  # Should advance to player 1
+        assert_turn_advances_to(game, 1)  # Should advance to player 1
         
         # Player 1 draws and plays
         game.add_message(DrawCardMessage(player_id=game.players[1].player_id))
         game.add_message(PlayDrawnCardMessage(player_id=game.players[1].player_id))
         process_messages_and_get_events(game)
         
-        assert_current_player(game, 2)  # Should advance to player 2
+        assert_turn_advances_to(game, 2)  # Should advance to player 2
         
         # Player 2 draws and plays
         game.add_message(DrawCardMessage(player_id=game.players[2].player_id))
         game.add_message(PlayDrawnCardMessage(player_id=game.players[2].player_id))
         process_messages_and_get_events(game)
         
-        assert_current_player(game, 0)  # Should wrap around to player 0
+        assert_turn_advances_to(game, 0)  # Should wrap around to player 0
     
     def test_turn_state_clears_on_advance(self):
         """Test turn state is cleared when advancing to next player"""
@@ -319,7 +319,7 @@ class TestTurnProgression:
         # Check turn state is cleared
         assert game.state.drawn_card is None
         assert game.state.played_card is None
-        assert_current_player(game, 1)
+        assert_turn_advances_to(game, 1)
 
 
 class TestGamePhaseTransitions:
