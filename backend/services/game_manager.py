@@ -836,6 +836,9 @@ class CaboGame:
         if self.state.special_action_player != message.player_id:
             return {"success": False, "error": "Not your special action"}
 
+        if self.state.special_action_type != "view_opponent":
+            return {"success": False, "error": "Not in view opponent phase"}
+
         if self.state.phase != GamePhase.WAITING_FOR_SPECIAL_ACTION:
             return {"success": False, "error": "Not in special action phase"}
 

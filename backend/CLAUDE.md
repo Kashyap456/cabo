@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 This is a FastAPI backend for a "Cabo" card game application. The project uses:
+
 - **FastAPI** for the web framework
 - **SQLAlchemy** with async support for database ORM
 - **Alembic** for database migrations
@@ -17,6 +18,7 @@ This is a FastAPI backend for a "Cabo" card game application. The project uses:
 ## Development Commands
 
 ### Environment Setup
+
 ```bash
 # Install dependencies
 uv sync
@@ -32,6 +34,7 @@ docker-compose down
 ```
 
 ### Database Operations
+
 ```bash
 # Create a new migration
 alembic revision --autogenerate -m "migration description"
@@ -44,6 +47,7 @@ alembic downgrade -1
 ```
 
 ### Running the Application
+
 ```bash
 # Development server
 uvicorn app.main:app --reload
@@ -53,6 +57,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ### Testing
+
 ```bash
 # Run all tests (automatically starts/stops database)
 ./test.sh
@@ -84,7 +89,9 @@ docker-compose down
 ## Architecture
 
 ### Core Structure
+
 - **`app/`** - Main FastAPI application
+
   - `main.py` - FastAPI app initialization with health check endpoint
   - `core/` - Core application utilities
     - `database.py` - Database connection and health check utilities
@@ -94,9 +101,11 @@ docker-compose down
   - `models/` - Database models (directory exists but empty)
 
 - **`tests/`** - Test suite using pytest
+
   - `test_health_check.py` - Health check endpoint tests
 
 - **`services/`** - Business logic layer
+
   - `game_manager.py` - Game state and logic management (empty template)
   - `room_manager.py` - Room/lobby management (empty template)
 
@@ -105,9 +114,11 @@ docker-compose down
   - `versions/` - Migration files
 
 ### Current State
+
 This appears to be a newly initialized project with basic structure in place but minimal implementation. Most core files contain only basic templates or are empty.
 
 ### Key Patterns
+
 - Uses async/await throughout for database and WebSocket operations
 - Follows FastAPI router pattern for organizing endpoints
 - Separates business logic into dedicated service modules
@@ -118,7 +129,7 @@ This appears to be a newly initialized project with basic structure in place but
 The project uses Alembic with async SQLAlchemy and Docker Compose for PostgreSQL. Database configuration is managed through environment variables in the `.env` file:
 
 - **POSTGRES_DB**: Database name (default: cabo_db)
-- **POSTGRES_USER**: Database user (default: cabo_user) 
+- **POSTGRES_USER**: Database user (default: cabo_user)
 - **POSTGRES_PASSWORD**: Database password (default: cabo_password)
 - **POSTGRES_HOST**: Database host (default: localhost)
 - **POSTGRES_PORT**: Database port (default: 5432)
@@ -129,10 +140,12 @@ The PostgreSQL container uses a persistent volume (`pgdata`) to retain data betw
 ## Cabo Game Rules
 
 ### Game Setup
+
 - Players start with 4 cards facedown, and can choose two of them to view.
 - An arbitrary player is chosen to start the game, and play continues clockwise.
 
 ### Gameplay
+
 - At the start of a player's turn, they draw a card from the deck.
 - They can either play that card, or replace one of their facedown cards with it, and then play the facedown card.
 - Some cards have special effects that trigger upon being played.
@@ -144,13 +157,20 @@ The PostgreSQL container uses a persistent volume (`pgdata`) to retain data betw
   - One more round is played, and once play returns to the player who called Cabo, the game ends.
 
 ### Special Card Effects
+
 - 7/8: You can choose one of your facedown cards to view.
 - 9/10: You can choose another player's facedown card to view.
 - J/Q: You can swap one of your facedown cards with another player's facedown card.
 - K: You can look at any card on the board, and can then choose to swap it with one of your facedown cards.
 
-
 ### Scoring
+
 - The player with the lowest sum of card values wins.
 - Aces are worth 1 point, 2s are worth 2 points, 3s are worth 3 points, etc.
 - Red Kings are worth -1 point, and Jokers are worth 0 points.
+
+## Game Implementation Notes
+
+### Miscellaneous
+
+- Cards are stored in "reverse" order-- the end of the list is the top of the deck.
