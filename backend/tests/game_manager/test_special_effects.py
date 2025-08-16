@@ -552,16 +552,15 @@ class TestSpecialActionTimeout:
     def test_special_action_timeout_advances_turn(self):
         """Test special action timeout advances turn without effect"""
         game = create_test_game(["Alice", "Bob"])
-        broadcaster = MockBroadcaster()
-        game.broadcast_callback = broadcaster
 
         # Set up special action scenario
         seven_card = create_specific_card(Rank.SEVEN, Suit.HEARTS)
-        setup_special_card_scenario(game, 0, seven_card)
+        broadcaster = setup_special_card_scenario(game, 0, seven_card)
+        game.broadcast_callback = broadcaster
 
         # Trigger timeout
         game.add_message(SpecialActionTimeoutMessage())
-        events = process_messages_and_get_events(game)
+        process_messages_and_get_events(game)
 
         # Should advance turn and clear special action state
         assert_turn_advances_to(game, 1)
@@ -769,7 +768,7 @@ class TestTurnTransitionTimeout:
         game = create_test_game(["Alice", "Bob"])
 
         # Alice plays a stackable card
-        stackable_card = create_specific_card(Rank.SEVEN, Suit.HEARTS)
+        stackable_card = create_specific_card(Rank.FIVE, Suit.HEARTS)
         replace_game_deck(game, [stackable_card])
 
         set_current_player(game, 0)
@@ -787,7 +786,7 @@ class TestTurnTransitionTimeout:
         # Bob calls STACK
         from services.game_manager import CallStackMessage
         game.add_message(CallStackMessage(player_id=bob_id))
-        events = process_messages_and_get_events(game)
+        process_messages_and_get_events(game)
 
         # Should cancel turn transition and enter stack phase
         assert_game_phase(game, GamePhase.STACK_CALLED)

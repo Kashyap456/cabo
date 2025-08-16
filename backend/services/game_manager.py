@@ -585,6 +585,9 @@ class CaboGame:
         self.state.stack_caller = message.player_id
         self.state.stack_timer_id = self._schedule_timeout(
             StackTimeoutMessage(), 30.0)
+        self.pending_timeouts.pop(
+            self.state.turn_transition_timer_id, None)
+        self.state.turn_transition_timer_id = None
 
         return {
             "success": True,
