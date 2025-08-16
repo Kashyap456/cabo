@@ -1,12 +1,12 @@
 """Test utilities for game manager tests"""
 
-from typing import List, Optional, Dict, Any, Callable
+from typing import List, Optional, Dict, Any, Callable, Tuple
 from services.game_manager import (
     CaboGame, Card, Rank, Suit, GamePhase, GameEvent,
     DrawCardMessage, PlayDrawnCardMessage, ReplaceAndPlayMessage,
     CallStackMessage, ExecuteStackMessage, CallCaboMessage,
     ViewOwnCardMessage, ViewOpponentCardMessage, SwapCardsMessage,
-    StackTimeoutMessage, SpecialActionTimeoutMessage, NextTurnMessage
+    StackTimeoutMessage, SpecialActionTimeoutMessage, SetupTimeoutMessage, NextTurnMessage
 )
 
 
@@ -30,7 +30,8 @@ class MockBroadcaster:
 
 
 def create_test_game(player_names: Optional[List[str]] = None,
-                     broadcast_callback: Optional[Callable] = None) -> CaboGame:
+                     broadcast_callback: Optional[Callable] = None,
+                     advance_setup: bool = True) -> CaboGame:
     """Create a game with test players"""
     if player_names is None:
         player_names = ["Alice", "Bob", "Charlie"]
@@ -40,7 +41,10 @@ def create_test_game(player_names: Optional[List[str]] = None,
     if broadcast_callback is None:
         broadcast_callback = MockBroadcaster()
 
-    return CaboGame(player_ids, player_names, broadcast_callback)
+    game = CaboGame(player_ids, player_names, broadcast_callback)
+    if advance_setup:
+        advance_setup_if_needed(game)
+    return game
 
 
 def create_specific_card(rank: Rank, suit: Optional[Suit] = None) -> Card:
@@ -56,15 +60,16 @@ def deal_specific_cards(game: CaboGame, player_index: int, cards: List[Card]):
     """Replace a player's hand with specific cards"""
     player = game.players[player_index]
     player.hand = cards.copy()
-    player.known_cards = [False] * len(cards)
 
 
-def set_player_known_cards(game: CaboGame, player_index: int, known_indices: List[int]):
-    """Mark specific cards as known for a player"""
-    player = game.players[player_index]
-    for i in known_indices:
-        if 0 <= i < len(player.hand):
-            player.known_cards[i] = True
+def set_player_temporarily_viewed_cards(game: CaboGame, viewer_index: int, viewed_cards: List[Tuple[int, int]]):
+    """Set temporarily viewed cards for a player"""
+    viewer_id = game.players[viewer_index].player_id
+    game.state.temporarily_viewed_cards[viewer_id].clear()
+    for target_index, card_index in viewed_cards:
+        target_id = game.players[target_index].player_id
+        game.state.temporarily_viewed_cards[viewer_id].add(
+            (target_id, card_index))
 
 
 def force_game_phase(game: CaboGame, phase: GamePhase):
@@ -141,12 +146,14 @@ def assert_player_has_card(game: CaboGame, player_index: int, card: Card, hand_i
         assert card_found, f"Player {player_index} does not have card {card}"
 
 
-def assert_card_is_known(game: CaboGame, player_index: int, card_index: int, expected_known: bool = True):
-    """Assert whether a player knows a specific card"""
-    player = game.players[player_index]
-    actual_known = player.known_cards[card_index]
-    assert actual_known == expected_known, \
-        f"Player {player_index} card {card_index} known={actual_known}, expected {expected_known}"
+def assert_card_is_temporarily_viewed(game: CaboGame, viewer_index: int, target_index: int, card_index: int, expected_viewed: bool = True):
+    """Assert whether a player can currently view a specific card"""
+    viewer_id = game.players[viewer_index].player_id
+    target_id = game.players[target_index].player_id
+    viewed_cards = game.state.temporarily_viewed_cards.get(viewer_id, set())
+    actual_viewed = (target_id, card_index) in viewed_cards
+    assert actual_viewed == expected_viewed, \
+        f"Player {viewer_index} viewing {target_index}:{card_index} = {actual_viewed}, expected {expected_viewed}"
 
 
 def assert_game_phase(game: CaboGame, expected_phase: GamePhase):
@@ -168,6 +175,16 @@ def advance_turn_if_needed(game: CaboGame):
     if game.state.phase == GamePhase.TURN_TRANSITION:
         # Trigger the timeout to advance the turn
         game.add_message(TurnTransitionTimeoutMessage())
+        process_messages_and_get_events(game)
+
+
+def advance_setup_if_needed(game: CaboGame):
+    """Advance from setup phase to playing phase"""
+    from services.game_manager import GamePhase
+
+    if game.state.phase == GamePhase.SETUP:
+        # Trigger the setup timeout to start the game
+        game.add_message(SetupTimeoutMessage())
         process_messages_and_get_events(game)
 
 

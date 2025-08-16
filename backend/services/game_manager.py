@@ -1,5 +1,6 @@
 from enum import Enum
-from typing import List, Optional, Dict, Any, Tuple, Callable, Union
+from typing import List, Optional, Dict, Any, Tuple, Callable, Union, Set
+from collections import defaultdict
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 import random
@@ -89,34 +90,21 @@ class Player:
     player_id: str
     name: str
     hand: List[Card] = field(default_factory=list)
-    known_cards: List[bool] = field(
-        default_factory=list)  # Which cards player knows
     has_called_cabo: bool = False
 
-    def add_card(self, card: Card, known: bool = False):
+    def add_card(self, card: Card):
         """Add a card to player's hand"""
         self.hand.append(card)
-        self.known_cards.append(known)
 
-    def replace_card(self, index: int, new_card: Card, known: bool = False) -> Card:
+    def replace_card(self, index: int, new_card: Card) -> Card:
         """Replace a card at given index, return the old card"""
         old_card = self.hand[index]
         self.hand[index] = new_card
-        self.known_cards[index] = known
         return old_card
-
-    def view_card(self, index: int):
-        """Mark a card as known"""
-        if 0 <= index < len(self.hand):
-            self.known_cards[index] = True
 
     def get_score(self) -> int:
         """Calculate total score of hand"""
         return sum(card.value for card in self.hand)
-
-    def get_visible_hand(self) -> List[Optional[Card]]:
-        """Return hand with only known cards visible"""
-        return [card if known else None for card, known in zip(self.hand, self.known_cards)]
 
 
 class GamePhase(Enum):
@@ -150,6 +138,7 @@ class MessageType(Enum):
     STACK_TIMEOUT = "stack_timeout"
     SPECIAL_ACTION_TIMEOUT = "special_action_timeout"
     TURN_TRANSITION_TIMEOUT = "turn_transition_timeout"
+    SETUP_TIMEOUT = "setup_timeout"
     NEXT_TURN = "next_turn"
     END_GAME = "end_game"
 
@@ -263,6 +252,11 @@ class TurnTransitionTimeoutMessage(SystemMessage):
 
 
 @dataclass
+class SetupTimeoutMessage(SystemMessage):
+    type: MessageType = MessageType.SETUP_TIMEOUT
+
+
+@dataclass
 class NextTurnMessage(SystemMessage):
     type: MessageType = MessageType.NEXT_TURN
 
@@ -296,9 +290,13 @@ class GameState:
     king_viewed_player: Optional[str] = None
     king_viewed_index: Optional[int] = None
     turn_transition_timer_id: Optional[str] = None
+    setup_timer_id: Optional[str] = None
     cabo_caller: Optional[str] = None
     final_round_started: bool = False
     winner: Optional[str] = None
+    # Track temporarily viewed cards: {viewer_id: {(target_player_id, card_index)}}
+    temporarily_viewed_cards: defaultdict = field(
+        default_factory=lambda: defaultdict(set))
 
 
 class CaboGame:
@@ -320,24 +318,30 @@ class CaboGame:
         # Deal initial cards
         self._deal_initial_cards()
 
-        # Start the game
-        self.state.phase = GamePhase.PLAYING
-        self.state.current_player_index = random.randint(
-            0, len(self.players) - 1)
+        # Set up initial card visibility (first 2 cards visible during setup)
+        for player in self.players:
+            self.state.temporarily_viewed_cards[player.player_id].add(
+                (player.player_id, 0))
+            self.state.temporarily_viewed_cards[player.player_id].add(
+                (player.player_id, 1))
+
+        # Schedule setup timeout (game stays in SETUP phase)
+        self.state.setup_timer_id = self._schedule_timeout(
+            SetupTimeoutMessage(), 10.0)  # 10 seconds for setup
+
         self._broadcast_event(
-            "game_started", {"current_player": self.get_current_player().player_id})
+            "game_started", {
+                "phase": "setup",
+                "setup_time_seconds": 10
+            })
 
     def _deal_initial_cards(self):
-        """Deal 4 cards to each player, let them view 2"""
+        """Deal 4 cards to each player"""
         for player in self.players:
             for _ in range(4):
                 card = self.deck.draw()
                 if card:
-                    player.add_card(card, known=False)
-
-            # Players can view their first 2 cards initially
-            player.view_card(0)
-            player.view_card(1)
+                    player.add_card(card)
 
     def is_cabo_called(self) -> bool:
         """Check if Cabo has been called (final round has started)"""
@@ -380,6 +384,9 @@ class CaboGame:
             elif timeout_id == self.state.turn_transition_timer_id:
                 self.message_queue.put(TurnTransitionTimeoutMessage())
                 self.state.turn_transition_timer_id = None
+            elif timeout_id == self.state.setup_timer_id:
+                self.message_queue.put(SetupTimeoutMessage())
+                self.state.setup_timer_id = None
 
     def add_message(self, message: GameMessage):
         """Add a message to the processing queue"""
@@ -431,6 +438,7 @@ class CaboGame:
             MessageType.STACK_TIMEOUT: self._handle_stack_timeout,
             MessageType.SPECIAL_ACTION_TIMEOUT: self._handle_special_action_timeout,
             MessageType.TURN_TRANSITION_TIMEOUT: self._handle_turn_transition_timeout,
+            MessageType.SETUP_TIMEOUT: self._handle_setup_timeout,
             MessageType.NEXT_TURN: self._handle_next_turn,
             MessageType.END_GAME: self._handle_end_game,
         }
@@ -524,7 +532,7 @@ class CaboGame:
 
         # Replace the card
         old_card = current_player.replace_card(
-            message.hand_index, self.state.drawn_card, known=True)
+            message.hand_index, self.state.drawn_card)
         self.state.played_card = old_card
         self.state.drawn_card = None
         self.discard_pile.append(old_card)
@@ -616,7 +624,6 @@ class CaboGame:
             if message.target_player_id is None:
                 # Self stack - discard the stack card
                 player.hand.pop(message.card_index)
-                player.known_cards.pop(message.card_index)
                 self.discard_pile.append(stack_card)
 
                 return {
@@ -635,8 +642,7 @@ class CaboGame:
                     return {"success": False, "error": "Target player not found"}
 
                 player.hand.pop(message.card_index)
-                player.known_cards.pop(message.card_index)
-                target_player.add_card(stack_card, known=False)
+                target_player.add_card(stack_card)
 
                 return {
                     "success": True,
@@ -652,7 +658,7 @@ class CaboGame:
             # Failed stack - player draws a card
             drawn_card = self.deck.draw()
             if drawn_card:
-                player.add_card(drawn_card, known=False)
+                player.add_card(drawn_card)
 
             return {
                 "success": True,
@@ -674,7 +680,7 @@ class CaboGame:
             # Apply penalty
             drawn_card = self.deck.draw()
             if drawn_card:
-                stack_caller.add_card(drawn_card, known=False)
+                stack_caller.add_card(drawn_card)
 
         self._clear_stack_state()
 
@@ -815,7 +821,10 @@ class CaboGame:
         if not (0 <= message.card_index < len(player.hand)):
             return {"success": False, "error": "Invalid card index"}
 
-        player.view_card(message.card_index)
+        # Add card to temporarily viewed cards
+        self.state.temporarily_viewed_cards[player.player_id].add(
+            (player.player_id, message.card_index))
+
         self._clear_special_action_state()
 
         # Start turn transition timer
@@ -853,6 +862,11 @@ class CaboGame:
             return {"success": False, "error": "Invalid card index"}
 
         viewed_card = target_player.hand[message.card_index]
+
+        # Add opponent's card to temporarily viewed cards for the viewer
+        self.state.temporarily_viewed_cards[message.player_id].add(
+            (message.target_player_id, message.card_index))
+
         self._clear_special_action_state()
 
         # Start turn transition timer
@@ -899,10 +913,6 @@ class CaboGame:
         player.hand[message.own_index] = target_card
         target_player.hand[message.target_index] = player_card
 
-        # Update known status
-        player.known_cards[message.own_index] = True
-        target_player.known_cards[message.target_index] = False
-
         self._clear_special_action_state()
 
         # Start turn transition timer
@@ -939,6 +949,10 @@ class CaboGame:
         self.state.king_viewed_card = target_player.hand[message.card_index]
         self.state.king_viewed_player = message.target_player_id
         self.state.king_viewed_index = message.card_index
+
+        # Add card to temporarily viewed cards for the viewer
+        self.state.temporarily_viewed_cards[message.player_id].add(
+            (message.target_player_id, message.card_index))
 
         # Move to swap phase
         self.state.phase = GamePhase.KING_SWAP_PHASE
@@ -978,10 +992,6 @@ class CaboGame:
 
         player.hand[message.own_index] = target_card
         target_player.hand[message.target_index] = player_card
-
-        # Update known status
-        player.known_cards[message.own_index] = True
-        target_player.known_cards[message.target_index] = False
 
         self._clear_king_state()
         self._clear_special_action_state()
@@ -1040,6 +1050,30 @@ class CaboGame:
             "event": GameEvent("special_action_timeout", {})
         }
 
+    def _handle_setup_timeout(self, message: SetupTimeoutMessage) -> Dict[str, Any]:
+        """Handle setup timeout - transition from SETUP to PLAYING"""
+        # Clear setup timer
+        if self.state.setup_timer_id:
+            self.pending_timeouts.pop(self.state.setup_timer_id, None)
+            self.state.setup_timer_id = None
+
+        # Clear initial card visibility (players can no longer see their initial cards)
+        self.state.temporarily_viewed_cards.clear()
+
+        # Choose starting player and transition to PLAYING
+        self.state.current_player_index = random.randint(
+            0, len(self.players) - 1)
+        self.state.phase = GamePhase.PLAYING
+
+        return {
+            "success": True,
+            "event": GameEvent("game_phase_changed", {
+                "phase": "playing",
+                "current_player": self.get_current_player().player_id,
+                "current_player_name": self.get_current_player().name
+            })
+        }
+
     def _handle_turn_transition_timeout(self, message: TurnTransitionTimeoutMessage) -> Dict[str, Any]:
         """Handle turn transition timeout"""
         # Clear turn transition state
@@ -1047,6 +1081,9 @@ class CaboGame:
             self.pending_timeouts.pop(
                 self.state.turn_transition_timer_id, None)
             self.state.turn_transition_timer_id = None
+
+        # Clear all temporary card visibility
+        self.state.temporarily_viewed_cards.clear()
 
         return {
             "success": True,
@@ -1072,12 +1109,27 @@ class CaboGame:
         player_states = []
         for p in self.players:
             if p.player_id == requesting_player_id:
-                # Full visibility for requesting player
+                # For requesting player: include visible card information
+                viewed_tuples = self.state.temporarily_viewed_cards.get(
+                    requesting_player_id, set())
+                visible_cards = []
+
+                # Convert tuples to format with actual card data
+                for target_player_id, card_index in viewed_tuples:
+                    target_player = self.get_player_by_id(target_player_id)
+                    if target_player and 0 <= card_index < len(target_player.hand):
+                        visible_cards.append({
+                            "target_player_id": target_player_id,
+                            "card_index": card_index,
+                            "card": str(target_player.hand[card_index])
+                        })
+
                 player_states.append({
                     "player_id": p.player_id,
                     "name": p.name,
-                    "hand": p.get_visible_hand(),
                     "hand_size": len(p.hand),
+                    # [{target_player_id, card_index, card}]
+                    "visible_cards": visible_cards,
                     "has_called_cabo": p.has_called_cabo
                 })
             else:

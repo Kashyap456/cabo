@@ -12,7 +12,7 @@ from .utils import (
     create_test_game, MockBroadcaster, create_specific_card,
     setup_special_card_scenario, deal_specific_cards, set_current_player,
     force_game_phase, replace_game_deck,
-    assert_player_hand_size, assert_player_has_card, assert_card_is_known,
+    assert_player_hand_size, assert_player_has_card, assert_card_is_temporarily_viewed,
     assert_game_phase, assert_current_player, assert_event_generated,
     process_messages_and_get_events, advance_turn_if_needed, assert_turn_advances_to,
     SPECIAL_CARDS
@@ -68,9 +68,6 @@ class TestViewOwnCardEffect:
         game.add_message(ViewOwnCardMessage(player_id=alice_id, card_index=2))
         events = process_messages_and_get_events(game)
 
-        # Check card is now known
-        assert_card_is_known(game, 0, 2, True)
-
         # Check turn advanced
         assert_turn_advances_to(game, 1)
         assert_game_phase(game, GamePhase.PLAYING)
@@ -102,8 +99,6 @@ class TestViewOwnCardEffect:
         events = process_messages_and_get_events(game)
 
         # The return value would contain the revealed card in a real implementation
-        # For now, we verify the card is marked as known
-        assert_card_is_known(game, 0, 3, True)
         assert_player_has_card(game, 0, target_card, 3)
 
     def test_cannot_view_invalid_card_index(self):
@@ -176,9 +171,6 @@ class TestViewOpponentCardEffect:
             card_index=2
         ))
         events = process_messages_and_get_events(game)
-
-        # Bob's card should NOT be marked as known to Bob
-        assert_card_is_known(game, 1, 2, False)
 
         # Turn should advance
         assert_turn_advances_to(game, 1)
@@ -287,12 +279,6 @@ class TestSwapCardsEffect:
         # Bob now has Alice's card
         assert_player_has_card(game, 1, alice_card, 0)
 
-        # Check Alice's new card is marked as known
-        assert_card_is_known(game, 0, 0, True)
-
-        # Check Bob's new card is not marked as known
-        assert_card_is_known(game, 1, 0, False)
-
         # Turn should advance
         assert_turn_advances_to(game, 1)
         assert_game_phase(game, GamePhase.PLAYING)
@@ -395,9 +381,6 @@ class TestKingEffect:
         ))
         process_messages_and_get_events(game)
 
-        # Card should be marked as known
-        assert_card_is_known(game, 0, 2, True)
-
         # Should transition to swap phase
         assert_game_phase(game, GamePhase.KING_SWAP_PHASE)
         assert game.state.king_viewed_player == alice_id
@@ -438,8 +421,7 @@ class TestKingEffect:
         assert game.state.king_viewed_player == bob_id
         assert game.state.king_viewed_index == 1
 
-        # Opponent's card should not be marked as known to them
-        assert_card_is_known(game, 1, 1, False)
+        # Opponent cards are viewed ephemerally during special actions
 
     def test_king_swap_after_viewing_own_card(self):
         """Test King can swap after viewing own card"""
@@ -482,9 +464,6 @@ class TestKingEffect:
         # Cards should be swapped
         assert_player_has_card(game, 0, bob_card, 0)
         assert_player_has_card(game, 1, alice_card, 0)
-
-        # Alice's new card should be known
-        assert_card_is_known(game, 0, 0, True)
 
         # Should be in turn transition, then advance
         assert_game_phase(game, GamePhase.TURN_TRANSITION)

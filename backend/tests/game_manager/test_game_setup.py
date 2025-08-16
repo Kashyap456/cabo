@@ -3,8 +3,8 @@
 import pytest
 from services.game_manager import CaboGame, GamePhase, Rank
 from .utils import (
-    create_test_game, MockBroadcaster, assert_player_hand_size,
-    assert_card_is_known, assert_game_phase, assert_current_player,
+    assert_card_is_temporarily_viewed, create_test_game, MockBroadcaster, assert_player_hand_size,
+    assert_game_phase, assert_current_player,
     assert_event_generated
 )
 
@@ -76,13 +76,17 @@ class TestCardDealing:
 
     def test_players_know_first_two_cards(self):
         """Test players can see their first two cards initially"""
-        game = create_test_game()
+        game = create_test_game(advance_setup=False)
 
         for player_index in range(len(game.players)):
-            assert_card_is_known(game, player_index, 0, True)
-            assert_card_is_known(game, player_index, 1, True)
-            assert_card_is_known(game, player_index, 2, False)
-            assert_card_is_known(game, player_index, 3, False)
+            assert_card_is_temporarily_viewed(
+                game, player_index, player_index, 0, True)
+            assert_card_is_temporarily_viewed(
+                game, player_index, player_index, 1, True)
+            assert_card_is_temporarily_viewed(
+                game, player_index, player_index, 2, False)
+            assert_card_is_temporarily_viewed(
+                game, player_index, player_index, 3, False)
 
     def test_no_duplicate_cards_dealt(self):
         """Test no duplicate cards are dealt to players"""
@@ -152,31 +156,37 @@ class TestInitialGameState:
 class TestGameStateVisibility:
     """Test game state visibility from different player perspectives"""
 
-    def test_player_sees_own_known_cards(self):
-        """Test player can see their own known cards in game state"""
-        game = create_test_game(["Alice", "Bob"])
+    def test_player_sees_visible_cards_during_setup(self):
+        """Test player can see their temporarily visible cards during setup"""
+        game = create_test_game(["Alice", "Bob"], advance_setup=False)
         alice_id = game.players[0].player_id
 
         state = game.get_game_state(alice_id)
         alice_player_state = state["players"][0]
 
-        # Alice should see her first two cards (known), but not the last two
-        hand = alice_player_state["hand"]
-        assert hand[0] is not None  # Known card
-        assert hand[1] is not None  # Known card
-        assert hand[2] is None      # Unknown card
-        assert hand[3] is None      # Unknown card
+        # Alice should see her first two cards during setup phase
+        visible_cards = alice_player_state["visible_cards"]
+        # Should have 2 visible cards (own cards at indices 0 and 1)
+        own_visible_cards = [vc for vc in visible_cards if vc["target_player_id"] == alice_id]
+        assert len(own_visible_cards) == 2
+        assert any(vc["card_index"] == 0 for vc in own_visible_cards)
+        assert any(vc["card_index"] == 1 for vc in own_visible_cards)
 
     def test_player_cannot_see_opponent_cards(self):
-        """Test player cannot see opponent's cards in game state"""
+        """Test player cannot see opponent's cards in game state (except during special actions)"""
         game = create_test_game(["Alice", "Bob"])
         alice_id = game.players[0].player_id
 
         state = game.get_game_state(alice_id)
+        alice_player_state = state["players"][0]
         bob_player_state = state["players"][1]
 
-        # Alice should not see Bob's hand at all
-        assert "hand" not in bob_player_state
+        # After setup phase, Alice should not see any cards
+        visible_cards = alice_player_state["visible_cards"]
+        assert len(visible_cards) == 0  # No temporarily visible cards after setup
+        
+        # Bob's state should not include hand details
+        assert "visible_cards" not in bob_player_state or len(bob_player_state.get("visible_cards", [])) == 0
         assert bob_player_state["hand_size"] == 4
 
     def test_game_state_includes_basic_info(self):

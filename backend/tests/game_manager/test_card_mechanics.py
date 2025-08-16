@@ -9,7 +9,7 @@ from services.game_manager import (
 from .utils import (
     advance_turn_if_needed, create_test_game, MockBroadcaster, create_specific_card,
     set_current_player, replace_game_deck, create_deck_with_specific_top_cards,
-    assert_player_hand_size, assert_player_has_card, assert_card_is_known,
+    assert_player_hand_size, assert_player_has_card,
     assert_game_phase, assert_current_player, assert_discard_top,
     assert_event_generated, process_messages_and_get_events, assert_turn_advances_to
 )
@@ -208,8 +208,6 @@ class TestReplaceAndPlay:
 
         # Check the hand card was replaced with drawn card
         assert_player_has_card(game, current_player_index, drawn_card, 0)
-        assert_card_is_known(game, current_player_index, 0,
-                             True)  # New card should be known
 
         # Check the old card was played
         assert_discard_top(game, hand_card)
