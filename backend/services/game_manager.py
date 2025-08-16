@@ -573,14 +573,27 @@ class CaboGame:
         if self.state.played_card is None:
             return {"success": False, "error": "No card to stack on"}
 
-        if self.state.phase == GamePhase.STACK_CALLED:
+        if self.state.phase == GamePhase.STACK_CALLED or self.state.stack_caller is not None:
             return {"success": False, "error": "Another player already called STACK"}
 
         player = self.get_player_by_id(message.player_id)
         if not player:
             return {"success": False, "error": "Player not found"}
 
-        # Start the stack phase
+        # Check if we're in a special action phase
+        if self.state.phase in [GamePhase.WAITING_FOR_SPECIAL_ACTION, GamePhase.KING_VIEW_PHASE, GamePhase.KING_SWAP_PHASE]:
+            # During special actions, just set the stack caller but don't change phase
+            self.state.stack_caller = message.player_id
+            return {
+                "success": True,
+                "event": GameEvent("stack_called", {
+                    "caller": player.name,
+                    "caller_id": message.player_id,
+                    "target_card": str(self.state.played_card)
+                })
+            }
+
+        # Normal case: immediately start the stack phase
         self.state.phase = GamePhase.STACK_CALLED
         self.state.stack_caller = message.player_id
         self.state.stack_timer_id = self._schedule_timeout(
@@ -796,6 +809,19 @@ class CaboGame:
         self.state.king_viewed_player = None
         self.state.king_viewed_index = None
 
+    def _transition_after_special_action(self):
+        """Transition to next phase after special action completes or times out"""
+        if self.state.stack_caller is not None:
+            # Move to stack phase instead of turn transition
+            self.state.phase = GamePhase.STACK_CALLED
+            self.state.stack_timer_id = self._schedule_timeout(
+                StackTimeoutMessage(), 30.0)
+        else:
+            # Normal case: start turn transition timer
+            self.state.phase = GamePhase.TURN_TRANSITION
+            self.state.turn_transition_timer_id = self._schedule_timeout(
+                TurnTransitionTimeoutMessage(), 5.0)
+
     def _get_special_action_type(self, card: Card) -> str:
         """Get the type of special action for a card"""
         rank = card.rank.value
@@ -830,10 +856,8 @@ class CaboGame:
 
         self._clear_special_action_state()
 
-        # Start turn transition timer
-        self.state.phase = GamePhase.TURN_TRANSITION
-        self.state.turn_transition_timer_id = self._schedule_timeout(
-            TurnTransitionTimeoutMessage(), 5.0)
+        # Transition to next phase (stack or turn transition)
+        self._transition_after_special_action()
 
         return {
             "success": True,
@@ -872,10 +896,8 @@ class CaboGame:
 
         self._clear_special_action_state()
 
-        # Start turn transition timer
-        self.state.phase = GamePhase.TURN_TRANSITION
-        self.state.turn_transition_timer_id = self._schedule_timeout(
-            TurnTransitionTimeoutMessage(), 5.0)
+        # Transition to next phase (stack or turn transition)
+        self._transition_after_special_action()
 
         return {
             "success": True,
@@ -918,10 +940,8 @@ class CaboGame:
 
         self._clear_special_action_state()
 
-        # Start turn transition timer
-        self.state.phase = GamePhase.TURN_TRANSITION
-        self.state.turn_transition_timer_id = self._schedule_timeout(
-            TurnTransitionTimeoutMessage(), 5.0)
+        # Transition to next phase (stack or turn transition)
+        self._transition_after_special_action()
 
         return {
             "success": True,
@@ -999,10 +1019,8 @@ class CaboGame:
         self._clear_king_state()
         self._clear_special_action_state()
 
-        # Start turn transition timer
-        self.state.phase = GamePhase.TURN_TRANSITION
-        self.state.turn_transition_timer_id = self._schedule_timeout(
-            TurnTransitionTimeoutMessage(), 5.0)
+        # Transition to next phase (stack or turn transition)
+        self._transition_after_special_action()
 
         return {
             "success": True,
@@ -1025,10 +1043,8 @@ class CaboGame:
         self._clear_king_state()
         self._clear_special_action_state()
 
-        # Start turn transition timer
-        self.state.phase = GamePhase.TURN_TRANSITION
-        self.state.turn_transition_timer_id = self._schedule_timeout(
-            TurnTransitionTimeoutMessage(), 5.0)
+        # Transition to next phase (stack or turn transition)
+        self._transition_after_special_action()
 
         return {
             "success": True,
@@ -1039,14 +1055,12 @@ class CaboGame:
 
     def _handle_special_action_timeout(self, message: SpecialActionTimeoutMessage) -> Dict[str, Any]:
         """Handle special action timeout"""
-        # Clear special action state and move to turn transition
+        # Clear special action state
         self._clear_special_action_state()
         self._clear_king_state()
 
-        # Start turn transition timer
-        self.state.phase = GamePhase.TURN_TRANSITION
-        self.state.turn_transition_timer_id = self._schedule_timeout(
-            TurnTransitionTimeoutMessage(), 5.0)
+        # Transition to next phase (stack or turn transition)
+        self._transition_after_special_action()
 
         return {
             "success": True,

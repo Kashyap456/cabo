@@ -4,7 +4,7 @@ import pytest
 from services.game_manager import (
     CaboGame, GamePhase, Rank, Suit,
     CallStackMessage, ExecuteStackMessage, StackTimeoutMessage,
-    DrawCardMessage, PlayDrawnCardMessage
+    DrawCardMessage, PlayDrawnCardMessage, SwapCardsMessage
 )
 from .utils import (
     create_test_game, MockBroadcaster, create_specific_card,
@@ -410,15 +410,29 @@ class TestStackIntegrationWithTurns:
 
         # Bob calls and executes failed stack
         bob_id = game.players[1].player_id
-        deal_specific_cards(game, 1, [wrong_card])
+        deal_specific_cards(
+            game, 1, [wrong_card, create_specific_card(Rank.JACK, Suit.CLUBS)])
 
         game.add_message(CallStackMessage(player_id=bob_id))
+        process_messages_and_get_events(game)
+        assert_game_phase(game, GamePhase.WAITING_FOR_SPECIAL_ACTION)
+
+        game.add_message(SwapCardsMessage(
+            player_id=alice_id,
+            own_index=0,
+            target_player_id=bob_id,
+            target_index=1
+        ))
+        process_messages_and_get_events(game)
+        assert_game_phase(game, GamePhase.STACK_CALLED)
+
         game.add_message(ExecuteStackMessage(
             player_id=bob_id,
             card_index=0,
             target_player_id=None
         ))
         process_messages_and_get_events(game)
+        assert_game_phase(game, GamePhase.PLAYING)
 
         # Turn should still advance normally
         assert_turn_advances_to(game, 1)
