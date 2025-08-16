@@ -1,4 +1,7 @@
 #!/bin/bash
+set -a  # automatically export all variables
+source .env
+set +a
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -58,7 +61,7 @@ run_command() {
 # Function to cleanup on exit
 cleanup() {
     print_status "Cleaning up..."
-    run_command "docker-compose down" "Stopping containers"
+    run_command "docker compose -p cabo_test -f docker-compose.test.yml down -v" "Stopping containers"
 }
 
 # Set up trap to ensure cleanup happens
@@ -72,42 +75,19 @@ fi
 
 # Start database
 print_status "Starting PostgreSQL database..."
-run_command "docker-compose up -d postgres" "Starting database"
+run_command "docker compose -p cabo_test -f docker-compose.test.yml up -d --wait postgres_test" "Starting database"
 
 if [ $? -ne 0 ]; then
     print_error "Failed to start database"
     exit 1
 fi
 
-# Wait for database to be ready
-print_status "Waiting for database to be ready..."
-max_attempts=90
-attempt=0
-
-while [ $attempt -lt $max_attempts ]; do
-    if run_command "docker-compose exec -T postgres pg_isready -U cabo_user -d cabo_db" "Checking database readiness"; then
-        print_status "Database is ready!"
-        break
-    fi
-    
-    attempt=$((attempt + 1))
-    if [ $attempt -eq $max_attempts ]; then
-        print_error "Database failed to start within 30 seconds"
-        exit 1
-    fi
-    
-    print_debug "Database not ready yet, waiting... (attempt $attempt/$max_attempts)"
-    sleep 1
-done
-
 # Run pytest with filtered arguments (excluding --debug)
 print_status "Running tests..."
 if [ "$DEBUG" = true ]; then
     print_debug "Running: pytest ${PYTEST_ARGS[*]}"
-    uv run pytest "${PYTEST_ARGS[@]}"
-else
-    uv run pytest "${PYTEST_ARGS[@]}"
 fi
+DATABASE_URL=$TEST_DATABASE_URL uv run pytest "${PYTEST_ARGS[@]}"
 test_exit_code=$?
 
 # Check test results

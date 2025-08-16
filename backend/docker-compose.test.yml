@@ -1,0 +1,19 @@
+version: '3.8'
+name: cabo_test
+services:
+  postgres_test:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: cabo_db
+      POSTGRES_USER: cabo_user
+      POSTGRES_PASSWORD: cabo_password
+    ports:
+      - "5434:5432"
+    volumes: []                       # no named volume
+    tmpfs:
+      - /var/lib/postgresql/data      # truly ephemeral (in-memory)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cabo_user -d cabo_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
