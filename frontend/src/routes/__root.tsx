@@ -3,15 +3,12 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanstackDevtools } from '@tanstack/react-devtools'
 
 import Header from '../components/Header'
-import { NicknameGuard } from '../components/NicknameGuard'
-import { ModalManager } from '../components/Modal'
 
 export const Route = createRootRoute({
   component: () => (
-    <NicknameGuard>
+    <>
       <Header />
       <Outlet />
-      <ModalManager />
       <TanstackDevtools
         config={{
           position: 'bottom-left',
@@ -23,6 +20,6 @@ export const Route = createRootRoute({
           },
         ]}
       />
-    </NicknameGuard>
+    </>
   ),
 })
