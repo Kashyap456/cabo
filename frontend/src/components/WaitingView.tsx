@@ -11,13 +11,16 @@ interface WaitingViewProps {
 export function WaitingView({ room, players }: WaitingViewProps) {
   const navigate = useNavigate()
   const { nickname } = useUserStore()
-  const { } = useGameStore()
+  const {} = useGameStore()
   const startGameMutation = useStartGame()
   const leaveRoomMutation = useLeaveRoom()
 
-  const isCurrentUserHost = room.host_session_id && players.some(
-    player => player.nickname === nickname && player.user_id === room.host_session_id
-  )
+  const isCurrentUserHost =
+    room.host_session_id &&
+    players.some(
+      (player) =>
+        player.nickname === nickname && player.user_id === room.host_session_id,
+    )
 
   const canStartGame = players.length >= 2 && isCurrentUserHost
 
@@ -44,16 +47,18 @@ export function WaitingView({ room, players }: WaitingViewProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-black">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2">Game Lobby</h1>
           <div className="flex items-center justify-center space-x-4">
             <div className="bg-white bg-opacity-20 rounded-lg px-6 py-3">
-              <span className="text-sm text-gray-300">Room Code:</span>
+              <span className="text-sm text-gray-800">Room Code:</span>
               <div className="flex items-center space-x-2">
-                <span className="text-2xl font-mono font-bold">{room.room_code}</span>
+                <span className="text-2xl font-mono font-bold">
+                  {room.room_code}
+                </span>
                 <button
                   onClick={copyRoomCode}
                   className="text-yellow-400 hover:text-yellow-300 text-sm"
@@ -77,7 +82,9 @@ export function WaitingView({ room, players }: WaitingViewProps) {
               </div>
               <div className="flex justify-between">
                 <span>Game Mode:</span>
-                <span className="capitalize">{room.config.gameMode || 'Classic'}</span>
+                <span className="capitalize">
+                  {room.config.gameMode || 'Classic'}
+                </span>
               </div>
             </div>
           </div>
@@ -95,7 +102,9 @@ export function WaitingView({ room, players }: WaitingViewProps) {
                 className="bg-white bg-opacity-20 rounded-lg p-4 flex items-center justify-between"
               >
                 <div className="flex items-center space-x-3">
-                  <div className={`w-3 h-3 rounded-full ${player.is_active ? 'bg-green-400' : 'bg-gray-400'}`} />
+                  <div
+                    className={`w-3 h-3 rounded-full ${player.is_active ? 'bg-green-400' : 'bg-gray-400'}`}
+                  />
                   <span className="font-medium">{player.nickname}</span>
                   {player.user_id === room.host_session_id && (
                     <span className="bg-yellow-500 text-yellow-900 px-2 py-1 rounded-full text-xs font-bold">
@@ -118,7 +127,8 @@ export function WaitingView({ room, players }: WaitingViewProps) {
           {players.length < 2 ? (
             <div className="bg-yellow-500 bg-opacity-20 border border-yellow-500 rounded-lg p-4 max-w-md mx-auto">
               <p className="text-yellow-200">
-                Waiting for more players to join. At least 2 players are needed to start the game.
+                Waiting for more players to join. At least 2 players are needed
+                to start the game.
               </p>
             </div>
           ) : isCurrentUserHost ? (
@@ -147,7 +157,7 @@ export function WaitingView({ room, players }: WaitingViewProps) {
               {startGameMutation.isPending ? 'Starting...' : 'Start Game'}
             </button>
           )}
-          
+
           <button
             onClick={handleLeaveRoom}
             disabled={leaveRoomMutation.isPending}
@@ -159,24 +169,35 @@ export function WaitingView({ room, players }: WaitingViewProps) {
 
         {/* Game Rules */}
         <div className="max-w-3xl mx-auto mt-12">
-          <h3 className="text-xl font-bold mb-4 text-center">How to Play Cabo</h3>
+          <h3 className="text-xl font-bold mb-4 text-center">
+            How to Play Cabo
+          </h3>
           <div className="bg-white bg-opacity-10 rounded-lg p-6">
             <div className="grid md:grid-cols-2 gap-6 text-sm">
               <div>
                 <h4 className="font-semibold mb-2">🎯 Objective</h4>
-                <p className="text-gray-300">Get the lowest total card value by the end of the game.</p>
+                <p className="text-gray-800">
+                  Get the lowest total card value by the end of the game.
+                </p>
               </div>
               <div>
                 <h4 className="font-semibold mb-2">🧠 Strategy</h4>
-                <p className="text-gray-300">Remember your cards and make smart swaps with the deck.</p>
+                <p className="text-gray-800">
+                  Remember your cards and make smart swaps with the deck.
+                </p>
               </div>
               <div>
                 <h4 className="font-semibold mb-2">📋 Setup</h4>
-                <p className="text-gray-300">Each player starts with 4 hidden cards. Look at your corner cards only!</p>
+                <p className="text-gray-800">
+                  Each player starts with 4 hidden cards. Look at your corner
+                  cards only!
+                </p>
               </div>
               <div>
                 <h4 className="font-semibold mb-2">🏁 Ending</h4>
-                <p className="text-gray-300">Call "Cabo" when you think you have the lowest total.</p>
+                <p className="text-gray-800">
+                  Call "Cabo" when you think you have the lowest total.
+                </p>
               </div>
             </div>
           </div>

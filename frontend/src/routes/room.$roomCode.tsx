@@ -1,7 +1,7 @@
 import { createFileRoute, useParams, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
-import { useRoom } from '../api'
-import { useGameStore, useUserStore } from '../stores'
+import { useRoom, useJoinRoom, useValidateSession } from '../api'
+import { useGameStore } from '../stores'
 import { WaitingView } from '../components/WaitingView'
 
 export const Route = createFileRoute('/room/$roomCode')({
@@ -11,17 +11,41 @@ export const Route = createFileRoute('/room/$roomCode')({
 function RoomPage() {
   const { roomCode } = useParams({ from: '/room/$roomCode' })
   const navigate = useNavigate()
-  const { hasValidSession } = useUserStore()
   const { setCurrentRoom, setGameState, clearGame } = useGameStore()
+  
+  // Check session status without immediate redirect
+  const { data: sessionData, isLoading: sessionLoading, error: sessionError } = useValidateSession()
+  const joinRoomMutation = useJoinRoom()
+  const { data: roomData, isLoading: roomLoading, error: roomError, refetch: refetchRoom } = useRoom(roomCode)
 
-  // Redirect to home if no valid session
+  // Handle session validation
   useEffect(() => {
-    if (!hasValidSession()) {
+    if (sessionError && !sessionLoading) {
+      // No valid session, redirect to home
       navigate({ to: '/' })
     }
-  }, [hasValidSession, navigate])
+  }, [sessionError, sessionLoading, navigate])
 
-  const { data: roomData, isLoading, error } = useRoom(roomCode)
+  // Try to join room if not already in it
+  useEffect(() => {
+    if (roomError && sessionData && !joinRoomMutation.isPending) {
+      // If we can't access the room, try to join it
+      const errorMessage = roomError.message || ''
+      if (errorMessage.includes('Not in this room') || errorMessage.includes('403')) {
+        joinRoomMutation.mutate(roomCode, {
+          onSuccess: () => {
+            // Successfully joined, refetch room data
+            refetchRoom()
+          },
+          onError: (error) => {
+            console.error('Failed to join room:', error)
+            // If join fails, redirect to home after a brief delay
+            setTimeout(() => navigate({ to: '/' }), 2000)
+          }
+        })
+      }
+    }
+  }, [roomError, sessionData, roomCode, joinRoomMutation, refetchRoom, navigate])
 
   useEffect(() => {
     if (roomData) {
@@ -37,25 +61,40 @@ function RoomPage() {
     }
   }, [clearGame])
 
+  const isLoading = sessionLoading || roomLoading || joinRoomMutation.isPending
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading room...</p>
+          <p className="text-gray-600">
+            {joinRoomMutation.isPending ? 'Joining room...' : 'Loading room...'}
+          </p>
         </div>
       </div>
     )
   }
 
-  if (error) {
+  if (roomError && !joinRoomMutation.isPending) {
+    const errorMessage = roomError.message || ''
+    const isRoomNotFound = errorMessage.includes('404') || errorMessage.includes('not found')
+    const canRetryJoin = errorMessage.includes('Not in this room') || errorMessage.includes('403')
+    
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-6">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Room Not Found</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+            {isRoomNotFound ? 'Room Not Found' : 'Unable to Access Room'}
+          </h2>
           <p className="text-gray-600 mb-4">
-            {error.message || 'Unable to load the room. It may not exist or you may not have access.'}
+            {isRoomNotFound 
+              ? 'This room may no longer exist or the code may be incorrect.'
+              : canRetryJoin 
+                ? 'Attempting to rejoin the room...'
+                : errorMessage
+            }
           </p>
           <button
             onClick={() => navigate({ to: '/' })}

@@ -10,6 +10,13 @@ from sqlalchemy.orm import selectinload
 from app.models import GameRoom, UserSession, RoomState, UserToRoom
 
 
+class AlreadyInRoomError(Exception):
+    """Exception raised when a user is already in a room"""
+    def __init__(self, message: str, current_room: GameRoom):
+        super().__init__(message)
+        self.current_room = current_room
+
+
 @dataclass
 class RoomConfig:
     max_players: int = 6
@@ -42,8 +49,21 @@ class RoomManager:
             select(UserToRoom).where(
                 UserToRoom.user_id == host_session.user_id)
         )
-        if existing_membership.scalar_one_or_none():
-            raise ValueError(f"Session {host_session_id} is already in a room")
+        membership = existing_membership.scalar_one_or_none()
+        if membership:
+            # Get the current room information with relationships loaded
+            current_room_result = await db.execute(
+                select(GameRoom)
+                .options(selectinload(GameRoom.user_memberships))
+                .where(GameRoom.room_id == membership.room_id)
+            )
+            current_room = current_room_result.scalar_one_or_none()
+            if current_room:
+                raise AlreadyInRoomError(f"Session {host_session_id} is already in a room", current_room)
+            else:
+                # Clean up stale membership
+                await db.execute(delete(UserToRoom).where(UserToRoom.user_id == host_session.user_id))
+                await db.commit()
 
         # Generate unique room code
         room_code = None
@@ -119,8 +139,21 @@ class RoomManager:
         existing_membership = await db.execute(
             select(UserToRoom).where(UserToRoom.user_id == session.user_id)
         )
-        if existing_membership.scalar_one_or_none():
-            raise ValueError(f"Session {session_id} is already in a room")
+        membership = existing_membership.scalar_one_or_none()
+        if membership:
+            # Get the current room information with relationships loaded
+            current_room_result = await db.execute(
+                select(GameRoom)
+                .options(selectinload(GameRoom.user_memberships))
+                .where(GameRoom.room_id == membership.room_id)
+            )
+            current_room = current_room_result.scalar_one_or_none()
+            if current_room:
+                raise AlreadyInRoomError(f"Session {session_id} is already in a room", current_room)
+            else:
+                # Clean up stale membership
+                await db.execute(delete(UserToRoom).where(UserToRoom.user_id == session.user_id))
+                await db.commit()
 
         # Check room capacity
         current_players = room.session_count

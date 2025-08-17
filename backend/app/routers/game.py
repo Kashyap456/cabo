@@ -8,7 +8,7 @@ import uuid
 from app.core.database import get_db
 from app.middleware.session import get_current_session
 from app.models import UserSession, GameRoom, RoomState
-from services.room_manager import RoomManager
+from services.room_manager import RoomManager, AlreadyInRoomError
 from services.game_orchestrator import GameOrchestrator
 from services.connection_manager import ConnectionManager
 
@@ -44,6 +44,12 @@ class UpdateConfigRequest(BaseModel):
     config: Dict[str, Any]
 
 
+class RoomConflictResponse(BaseModel):
+    error_type: str = "already_in_room"
+    message: str
+    current_room: Dict[str, Any]
+
+
 def serialize_room(room: GameRoom) -> Dict[str, Any]:
     """Convert GameRoom to JSON-serializable dict"""
     return {
@@ -55,7 +61,7 @@ def serialize_room(room: GameRoom) -> Dict[str, Any]:
         "created_at": room.created_at.isoformat() if room.created_at else None,
         "last_activity": room.last_activity.isoformat() if room.last_activity else None,
         "game_started_at": room.game_started_at.isoformat() if room.game_started_at else None,
-        "player_count": len(room.sessions) if room.sessions else 0
+        "player_count": room.session_count
     }
 
 
@@ -85,6 +91,15 @@ async def create_room(
             room_code=room.room_code,
             room_id=str(room.room_id)
         )
+    except AlreadyInRoomError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error_type": "already_in_room",
+                "message": str(e),
+                "current_room": serialize_room(e.current_room)
+            }
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -109,6 +124,15 @@ async def join_room(
         return JoinRoomResponse(
             success=True,
             room=serialize_room(room)
+        )
+    except AlreadyInRoomError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error_type": "already_in_room",
+                "message": str(e),
+                "current_room": serialize_room(e.current_room)
+            }
         )
     except ValueError as e:
         raise HTTPException(

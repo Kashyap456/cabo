@@ -1,4 +1,13 @@
+import type { GameRoom } from './types'
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+export class RoomConflictError extends Error {
+  constructor(message: string, public currentRoom: GameRoom) {
+    super(message)
+    this.name = 'RoomConflictError'
+  }
+}
 
 class ApiClient {
   private baseUrl: string
@@ -26,6 +35,24 @@ class ApiClient {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+      
+      // Debug logging for 409 responses
+      if (response.status === 409) {
+        console.log('🔍 409 Response Debug:', {
+          status: response.status,
+          errorData,
+          hasDetail: !!errorData.detail,
+          detailType: errorData.detail?.error_type,
+          hasCurrentRoom: !!errorData.detail?.current_room
+        })
+      }
+      
+      // Handle 409 Conflict (already in room) specifically
+      if (response.status === 409 && errorData.detail?.error_type === 'already_in_room') {
+        console.log('✅ Creating RoomConflictError with:', errorData.detail)
+        throw new RoomConflictError(errorData.detail.message, errorData.detail.current_room)
+      }
+      
       throw new Error(errorData.detail || `HTTP ${response.status}`)
     }
 

@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useUiStore, useGameStore } from '../stores'
-import { useJoinRoom } from '../api'
+import { useJoinRoom, RoomConflictError } from '../api'
 import { Modal } from './Modal'
 
 export function JoinGameModal() {
   const navigate = useNavigate()
-  const { activeModal, closeModal, setLoading, setError } = useUiStore()
+  const { activeModal, closeModal, setLoading, setError, openModal, setRoomConflictData } = useUiStore()
   const { setIsHost } = useGameStore()
   const joinRoomMutation = useJoinRoom()
   
@@ -26,8 +26,23 @@ export function JoinGameModal() {
       closeModal()
       
       navigate({ to: `/room/${roomCode.toUpperCase()}` })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to join game:', error)
+      
+      // Check if this is a room conflict error
+      if (error instanceof RoomConflictError) {
+        // Show room conflict modal
+        setRoomConflictData({
+          currentRoom: error.currentRoom,
+          requestedAction: 'join',
+          requestedRoomCode: roomCode.toUpperCase()
+        })
+        closeModal()
+        openModal('room-conflict')
+        return
+      }
+      
+      // Handle other errors
       setError(error instanceof Error ? error.message : 'Failed to join room')
     } finally {
       setLoading(false)

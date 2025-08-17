@@ -3,6 +3,7 @@ import { useUiStore } from '../stores'
 import { NicknameModal } from './NicknameModal'
 import { CreateGameModal } from './CreateGameModal'
 import { JoinGameModal } from './JoinGameModal'
+import { RoomConflictModal } from './RoomConflictModal'
 
 interface ModalProps {
   isOpen: boolean
@@ -42,6 +43,7 @@ export function ModalManager() {
       {activeModal === 'nickname-prompt' && <NicknameModal />}
       {activeModal === 'create-game' && <CreateGameModal />}
       {activeModal === 'join-game' && <JoinGameModal />}
+      {activeModal === 'room-conflict' && <RoomConflictModal />}
     </>
   )
 }
