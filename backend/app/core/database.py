@@ -2,11 +2,9 @@ import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql+asyncpg://cabo_user:cabo_password@localhost:5433/cabo_db")

@@ -42,14 +42,11 @@ class UserSession(Base):
         nullable=False,
         default=True
     )
-    room_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("game_rooms.room_id"),
-        nullable=True
-    )
-    
-    # Relationship
-    room = relationship("GameRoom", back_populates="sessions", foreign_keys=[room_id])
+    # Relationships
+    room_memberships = relationship(
+        "UserToRoom", back_populates="user", cascade="all, delete-orphan")
+    hosted_rooms = relationship(
+        "GameRoom", back_populates="host", foreign_keys="GameRoom.host_session_id")
 
     __table_args__ = (
         Index('ix_user_sessions_token_active', 'token', 'is_active'),
@@ -70,3 +67,15 @@ class UserSession(Base):
         self.token = uuid.uuid4()
         self.expires_at = datetime.utcnow() + timedelta(days=ttl_days)
         self.last_accessed = datetime.utcnow()
+
+    def get_current_room(self):
+        """Get the current room this user is in (assumes user can only be in one room at a time)"""
+        if hasattr(self, '_room_memberships_loaded') and self.room_memberships:
+            return self.room_memberships[0].room
+        return None
+
+    def get_current_room_id(self):
+        """Get the current room ID this user is in"""
+        if hasattr(self, '_room_memberships_loaded') and self.room_memberships:
+            return self.room_memberships[0].room_id
+        return None

@@ -16,16 +16,30 @@ class RoomState(Enum):
 
 class GameRoom(Base):
     __tablename__ = "game_rooms"
-    
+
     room_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     room_code = Column(String(6), unique=True, index=True, nullable=False)
     config = Column(JSON, nullable=False, default={})
-    state = Column(SQLEnum(RoomState), default=RoomState.WAITING, nullable=False)
-    host_session_id = Column(UUID(as_uuid=True), ForeignKey("user_sessions.user_id"))
+    state = Column(SQLEnum(RoomState),
+                   default=RoomState.WAITING, nullable=False)
+    host_session_id = Column(
+        UUID(as_uuid=True), ForeignKey("user_sessions.user_id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     last_activity = Column(DateTime, default=datetime.utcnow)
     game_started_at = Column(DateTime, nullable=True)
-    
+
     # Relationships
-    sessions = relationship("UserSession", back_populates="room", foreign_keys="UserSession.room_id")
-    host = relationship("UserSession", foreign_keys=[host_session_id])
+    user_memberships = relationship(
+        "UserToRoom", back_populates="room", cascade="all, delete-orphan")
+    host = relationship(
+        "UserSession", back_populates="hosted_rooms", foreign_keys=[host_session_id])
+
+    @property
+    def sessions(self):
+        """Get all user sessions in this room"""
+        return [membership.user for membership in self.user_memberships]
+
+    @property
+    def session_count(self):
+        """Get the number of users in this room"""
+        return len(self.user_memberships)

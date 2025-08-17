@@ -6,7 +6,7 @@ import json
 from typing import Optional
 
 from app.core.database import get_db
-from app.models import UserSession, GameRoom
+from app.models import UserSession, GameRoom, UserToRoom
 from services.connection_manager import ConnectionManager
 from services.room_manager import RoomManager
 
@@ -25,7 +25,7 @@ async def authenticate_websocket(websocket: WebSocket, token: str, db: AsyncSess
     """Authenticate WebSocket connection using session token"""
     if not token:
         return None
-    
+
     # Find session by token
     result = await db.execute(
         select(UserSession).where(
@@ -34,14 +34,14 @@ async def authenticate_websocket(websocket: WebSocket, token: str, db: AsyncSess
         )
     )
     session = result.scalar_one_or_none()
-    
+
     if not session or session.is_expired():
         return None
-    
+
     # Update last accessed time
     session.last_accessed = session.last_accessed
     await db.commit()
-    
+
     return session
 
 
@@ -49,7 +49,7 @@ async def send_room_state(session_id: str, room: GameRoom, db: AsyncSession):
     """Send current room state to a session"""
     # Get all players in room
     players = await room_manager.get_room_players(db, room.room_id)
-    
+
     room_state = {
         "type": "room_state",
         "room": {
@@ -68,7 +68,7 @@ async def send_room_state(session_id: str, room: GameRoom, db: AsyncSession):
             ]
         }
     }
-    
+
     await connection_manager.send_to_session(session_id, room_state)
 
 
@@ -81,23 +81,27 @@ async def websocket_endpoint(
     """WebSocket endpoint for real-time game communication"""
     session = None
     session_id = None
-    
+
     try:
         # Authenticate
         session = await authenticate_websocket(websocket, token, db)
         if not session:
             await websocket.close(code=4001, reason="Unauthorized")
             return
-        
+
         session_id = str(session.user_id)
-        
+
         # Accept connection
         await websocket.accept()
         logger.info(f"WebSocket connection accepted for session {session_id}")
-        
-        # If session has room_id, add to room connections
-        if session.room_id:
-            room = await room_manager.get_room_by_id(db, str(session.room_id))
+
+        # Check if session is in a room and add to room connections
+        membership_result = await db.execute(
+            select(UserToRoom).where(UserToRoom.user_id == session.user_id)
+        )
+        membership = membership_result.scalar_one_or_none()
+        if membership:
+            room = await room_manager.get_room_by_id(db, str(membership.room_id))
             if room:
                 await connection_manager.add_to_room(session_id, str(room.room_id), websocket)
                 await send_room_state(session_id, room, db)
@@ -108,27 +112,34 @@ async def websocket_endpoint(
                 "session_id": session_id,
                 "nickname": session.nickname
             })
-        
+
         # Main message loop
         while True:
             try:
                 # Receive message
                 data = await websocket.receive_text()
                 message = json.loads(data)
-                
-                logger.debug(f"Received message from {session_id}: {message.get('type')}")
-                
+
+                logger.debug(
+                    f"Received message from {session_id}: {message.get('type')}")
+
                 # Route message based on type
-                if session.room_id and game_orchestrator:
+                # Check if session is in a room for game messages
+                membership_result = await db.execute(
+                    select(UserToRoom).where(
+                        UserToRoom.user_id == session.user_id)
+                )
+                membership = membership_result.scalar_one_or_none()
+                if membership and game_orchestrator:
                     # Route game messages to orchestrator
                     # TODO: Uncomment when GameOrchestrator is implemented
                     # await game_orchestrator.handle_player_message(
                     #     str(session.room_id), session_id, message
                     # )
-                    
+
                     # For now, just echo to room for testing
                     await connection_manager.broadcast_to_room(
-                        str(session.room_id),
+                        str(membership.room_id),
                         {
                             "type": "game_message",
                             "from": session_id,
@@ -138,7 +149,7 @@ async def websocket_endpoint(
                 else:
                     # Handle lobby/non-game messages
                     await handle_lobby_message(websocket, session, message, db)
-                    
+
             except json.JSONDecodeError:
                 await websocket.send_json({
                     "type": "error",
@@ -150,7 +161,7 @@ async def websocket_endpoint(
                     "type": "error",
                     "message": str(e)
                 })
-                
+
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session {session_id}")
     except Exception as e:
@@ -164,15 +175,20 @@ async def websocket_endpoint(
 async def handle_lobby_message(websocket: WebSocket, session: UserSession, message: dict, db: AsyncSession):
     """Handle messages when not in a game"""
     msg_type = message.get("type")
-    
+
     if msg_type == "ping":
         await websocket.send_json({"type": "pong"})
     elif msg_type == "get_session_info":
+        # Check current room membership for session info
+        membership_result = await db.execute(
+            select(UserToRoom).where(UserToRoom.user_id == session.user_id)
+        )
+        current_membership = membership_result.scalar_one_or_none()
         await websocket.send_json({
             "type": "session_info",
             "session_id": str(session.user_id),
             "nickname": session.nickname,
-            "room_id": str(session.room_id) if session.room_id else None
+            "room_id": str(current_membership.room_id) if current_membership else None
         })
     else:
         await websocket.send_json({

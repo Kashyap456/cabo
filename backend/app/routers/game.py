@@ -85,9 +85,11 @@ async def create_room(
             room_id=str(room.room_id)
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/{room_code}/join", response_model=JoinRoomResponse)
@@ -108,9 +110,11 @@ async def join_room(
             room=serialize_room(room)
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/{room_code}/leave")
@@ -130,7 +134,8 @@ async def leave_room(
             "new_host_id": str(new_host_id) if new_host_id else None
         }
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/{room_code}", response_model=RoomResponse)
@@ -141,16 +146,26 @@ async def get_room(
 ):
     """Get room information"""
     room = await room_manager.get_room(db, room_code.upper())
-    
+
     if not room:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+
     # Check if user is in the room
-    if current_session.room_id != room.room_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not in this room")
-    
+    # Check if user is in this room
+    from app.models import UserToRoom
+    membership_result = await db.execute(
+        select(UserToRoom).where(
+            UserToRoom.user_id == current_session.user_id,
+            UserToRoom.room_id == room.room_id
+        )
+    )
+    if not membership_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not in this room")
+
     players = await room_manager.get_room_players(db, room.room_id)
-    
+
     return RoomResponse(
         room=serialize_room(room),
         players=[serialize_player(p) for p in players]
@@ -170,20 +185,22 @@ async def start_game(
             room_code.upper(),
             str(current_session.user_id)
         )
-        
+
         # Create CaboGame instance via GameOrchestrator
         if game_orchestrator:
             players = await room_manager.get_room_players(db, room.room_id)
             await game_orchestrator.create_game(room, players)
-        
+
         return {
             "success": True,
             "room": serialize_room(room)
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.patch("/{room_code}/config")
@@ -206,9 +223,11 @@ async def update_room_config(
             "room": serialize_room(room)
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 def set_game_orchestrator(orchestrator: GameOrchestrator):
