@@ -17,6 +17,8 @@ This is a FastAPI backend for a "Cabo" card game application. The project uses:
 
 ## Development Commands
 
+When running any python command, prefix the command with "uv run" in order to use the virtual environment.
+
 ### Environment Setup
 
 ```bash

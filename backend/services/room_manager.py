@@ -12,6 +12,7 @@ from app.models import GameRoom, UserSession, RoomState, UserToRoom
 
 class AlreadyInRoomError(Exception):
     """Exception raised when a user is already in a room"""
+
     def __init__(self, message: str, current_room: GameRoom):
         super().__init__(message)
         self.current_room = current_room
@@ -59,7 +60,8 @@ class RoomManager:
             )
             current_room = current_room_result.scalar_one_or_none()
             if current_room:
-                raise AlreadyInRoomError(f"Session {host_session_id} is already in a room", current_room)
+                raise AlreadyInRoomError(
+                    f"Session {host_session_id} is already in a room", current_room)
             else:
                 # Clean up stale membership
                 await db.execute(delete(UserToRoom).where(UserToRoom.user_id == host_session.user_id))
@@ -149,7 +151,8 @@ class RoomManager:
             )
             current_room = current_room_result.scalar_one_or_none()
             if current_room:
-                raise AlreadyInRoomError(f"Session {session_id} is already in a room", current_room)
+                raise AlreadyInRoomError(
+                    f"Session {session_id} is already in a room", current_room)
             else:
                 # Clean up stale membership
                 await db.execute(delete(UserToRoom).where(UserToRoom.user_id == session.user_id))
@@ -252,7 +255,7 @@ class RoomManager:
         if not room:
             raise ValueError(f"Room {room_code} not found")
 
-        if room.host_session_id != session_id:
+        if str(room.host_session_id) != str(session_id):
             raise ValueError("Only the host can start the game")
 
         if room.state != RoomState.WAITING:

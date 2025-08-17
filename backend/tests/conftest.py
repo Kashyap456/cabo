@@ -1,4 +1,5 @@
 # conftest.py
+from app.core.database import Base  # your Declarative Base
 import os
 import pytest
 import pytest_asyncio
@@ -13,12 +14,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Normalize URLs so all tests hit the same DB
-print(os.environ)
 os.environ.setdefault("DATABASE_URL", os.environ["TEST_DATABASE_URL"])
 TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
 print(TEST_DATABASE_URL)
 
-from app.core.database import Base  # your Declarative Base
 
 @pytest_asyncio.fixture(scope="function")
 async def async_session():
