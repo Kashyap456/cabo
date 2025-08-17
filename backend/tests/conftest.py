@@ -13,7 +13,7 @@ from app.core.database import Base  # your Declarative Base
 # Normalize URLs so all tests hit the same DB
 os.environ.setdefault(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://cabo_user:cabo_password@localhost:5434/cabo_db",
+    "postgresql+asyncpg://cabo_user:cabo_password@localhost:5432/cabo_db",
 )
 os.environ.setdefault("DATABASE_URL", os.environ["TEST_DATABASE_URL"])
 TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]

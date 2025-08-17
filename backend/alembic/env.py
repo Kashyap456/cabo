@@ -28,7 +28,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from app.core.database import Base
-from app.models import UserSession
+from app.models import UserSession, GameRoom, RoomState
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

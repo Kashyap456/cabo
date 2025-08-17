@@ -1,15 +1,28 @@
 from fastapi import FastAPI, HTTPException
 from app.core.database import check_database_connection
-from app.routers import session
+from app.routers import session, game, ws
 from app.middleware.session import SessionMiddleware
+from services.connection_manager import ConnectionManager
+from services.game_orchestrator import GameOrchestrator
 
 app = FastAPI()
+
+# Initialize shared services
+connection_manager = ConnectionManager()
+game_orchestrator = GameOrchestrator(connection_manager)
+
+# Set up dependencies in routers
+game.set_connection_manager(connection_manager)
+game.set_game_orchestrator(game_orchestrator)
+ws.set_game_orchestrator(game_orchestrator)
 
 # Add middleware
 app.add_middleware(SessionMiddleware, refresh_threshold_days=7, ttl_days=180)
 
 # Include routers
 app.include_router(session.router)
+app.include_router(game.router)
+app.include_router(ws.ws_router)
 
 @app.get("/health-check")
 async def health_check():

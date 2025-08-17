@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, timedelta
-from sqlalchemy import String, Boolean, DateTime, Index
+from sqlalchemy import String, Boolean, DateTime, Index, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 
@@ -42,6 +42,14 @@ class UserSession(Base):
         nullable=False,
         default=True
     )
+    room_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("game_rooms.room_id"),
+        nullable=True
+    )
+    
+    # Relationship
+    room = relationship("GameRoom", back_populates="sessions", foreign_keys=[room_id])
 
     __table_args__ = (
         Index('ix_user_sessions_token_active', 'token', 'is_active'),
