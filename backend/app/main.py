@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import check_database_connection
 from app.routers import session, game, ws
 from app.middleware.session import SessionMiddleware
@@ -6,6 +7,15 @@ from services.connection_manager import ConnectionManager
 from services.game_orchestrator import GameOrchestrator
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Frontend development server
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 # Initialize shared services
 connection_manager = ConnectionManager()
