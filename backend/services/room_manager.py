@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from sqlalchemy.orm import selectinload
 
-from app.models import GameRoom, UserSession, RoomState, UserToRoom
+from app.models import GameRoom, UserSession, RoomPhase, UserToRoom
 
 
 class AlreadyInRoomError(Exception):
@@ -92,7 +92,7 @@ class RoomManager:
         room = GameRoom(
             room_code=room_code,
             config=room_config,
-            state=RoomState.WAITING,
+            phase=RoomPhase.WAITING,
             host_session_id=host_session_id,
             created_at=datetime.utcnow(),
             last_activity=datetime.utcnow()
@@ -117,16 +117,15 @@ class RoomManager:
         # Find the room
         result = await db.execute(
             select(GameRoom)
-            .options(selectinload(GameRoom.user_memberships))
+            .options(selectinload(GameRoom.user_memberships)
+                     .selectinload(UserToRoom.user))
             .where(GameRoom.room_code == room_code)
         )
         room = result.scalar_one_or_none()
+        print(str(room.user_memberships))
 
         if not room:
             raise ValueError(f"Room {room_code} not found")
-
-        if room.state != RoomState.WAITING:
-            raise ValueError(f"Room {room_code} is not accepting new players")
 
         # Find the session
         result = await db.execute(
@@ -151,12 +150,17 @@ class RoomManager:
             )
             current_room = current_room_result.scalar_one_or_none()
             if current_room:
+                if current_room.room_code == room_code:
+                    return current_room
                 raise AlreadyInRoomError(
                     f"Session {session_id} is already in a room", current_room)
             else:
                 # Clean up stale membership
                 await db.execute(delete(UserToRoom).where(UserToRoom.user_id == session.user_id))
                 await db.commit()
+
+        if room.phase != RoomPhase.WAITING:
+            raise ValueError(f"Room {room_code} is not accepting new players")
 
         # Check room capacity
         current_players = room.session_count
@@ -258,7 +262,7 @@ class RoomManager:
         if str(room.host_session_id) != str(session_id):
             raise ValueError("Only the host can start the game")
 
-        if room.state != RoomState.WAITING:
+        if room.phase != RoomPhase.WAITING:
             raise ValueError(f"Room {room_code} is not in waiting state")
 
         # Check minimum players
@@ -269,7 +273,7 @@ class RoomManager:
             raise ValueError(f"Need at least {min_players} players to start")
 
         # Start the game
-        room.state = RoomState.IN_GAME
+        room.phase = RoomPhase.PLAYING
         room.game_started_at = datetime.utcnow()
         room.last_activity = datetime.utcnow()
 
@@ -313,7 +317,7 @@ class RoomManager:
         if room.host_session_id != session_id:
             raise ValueError("Only the host can update room configuration")
 
-        if room.state != RoomState.WAITING:
+        if room.phase != RoomPhase.WAITING:
             raise ValueError(
                 "Cannot update configuration after game has started")
 
@@ -333,7 +337,7 @@ class RoomManager:
         result = await db.execute(
             select(GameRoom).where(
                 GameRoom.last_activity < cutoff_datetime,
-                GameRoom.state == RoomState.WAITING
+                GameRoom.phase == RoomPhase.WAITING
             )
         )
         expired_rooms = result.scalars().all()

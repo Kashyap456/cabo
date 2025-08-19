@@ -8,7 +8,7 @@ import uuid
 from app.core.database import Base
 
 
-class RoomState(Enum):
+class RoomPhase(Enum):
     WAITING = "WAITING"
     IN_GAME = "IN_GAME"
     FINISHED = "FINISHED"
@@ -20,8 +20,8 @@ class GameRoom(Base):
     room_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     room_code = Column(String(6), unique=True, index=True, nullable=False)
     config = Column(JSON, nullable=False, default={})
-    state = Column(SQLEnum(RoomState),
-                   default=RoomState.WAITING, nullable=False)
+    phase = Column(SQLEnum(RoomPhase),
+                   default=RoomPhase.WAITING, nullable=False)
     host_session_id = Column(
         UUID(as_uuid=True), ForeignKey("user_sessions.user_id"))
     created_at = Column(DateTime, default=datetime.utcnow)

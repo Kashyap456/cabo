@@ -7,7 +7,7 @@ import uuid
 
 from app.core.database import get_db
 from app.middleware.session import get_current_session
-from app.models import UserSession, GameRoom, RoomState
+from app.models import UserSession, GameRoom
 from services.room_manager import RoomManager, AlreadyInRoomError
 from services.game_orchestrator import GameOrchestrator
 from services.connection_manager import ConnectionManager
@@ -28,6 +28,7 @@ class CreateRoomRequest(BaseModel):
 class CreateRoomResponse(BaseModel):
     room_code: str
     room_id: str
+    host_session_id: str
 
 
 class JoinRoomResponse(BaseModel):
@@ -50,27 +51,28 @@ class RoomConflictResponse(BaseModel):
     current_room: Dict[str, Any]
 
 
+def serialize_player(session: UserSession, room: GameRoom) -> Dict[str, Any]:
+    """Convert UserSession to JSON-serializable dict for room context"""
+    return {
+        "user_id": str(session.user_id),
+        "nickname": session.nickname,
+        "isHost": session.user_id == room.host_session_id
+    }
+
+
 def serialize_room(room: GameRoom) -> Dict[str, Any]:
     """Convert GameRoom to JSON-serializable dict"""
     return {
         "room_id": str(room.room_id),
         "room_code": room.room_code,
+        "phase": room.phase.value,
         "config": room.config,
-        "state": room.state.value,
         "host_session_id": str(room.host_session_id) if room.host_session_id else None,
         "created_at": room.created_at.isoformat() if room.created_at else None,
         "last_activity": room.last_activity.isoformat() if room.last_activity else None,
         "game_started_at": room.game_started_at.isoformat() if room.game_started_at else None,
-        "player_count": room.session_count
-    }
-
-
-def serialize_player(session: UserSession) -> Dict[str, Any]:
-    """Convert UserSession to JSON-serializable dict for room context"""
-    return {
-        "user_id": str(session.user_id),
-        "nickname": session.nickname,
-        "is_active": session.is_active
+        "player_count": room.session_count,
+        "players": [serialize_player(p, room) for p in room.sessions]
     }
 
 
@@ -89,7 +91,8 @@ async def create_room(
         )
         return CreateRoomResponse(
             room_code=room.room_code,
-            room_id=str(room.room_id)
+            room_id=str(room.room_id),
+            host_session_id=str(room.host_session_id)
         )
     except AlreadyInRoomError as e:
         raise HTTPException(

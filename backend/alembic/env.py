@@ -1,4 +1,4 @@
-from app.models import UserSession, GameRoom, RoomState, UserToRoom
+from app.models import UserSession, GameRoom, RoomPhase, UserToRoom
 from app.core.database import Base
 import asyncio
 import os
