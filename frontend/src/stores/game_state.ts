@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useAuthStore } from './auth'
 
 export enum RoomPhase {
     WAITING = 'WAITING',
@@ -25,13 +26,25 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
   removePlayer: (playerId) => set((state) => ({ 
     players: state.players.filter(p => p.id !== playerId) 
   })),
-  isHost: false,
-  setIsHost: (isHost) => set({ isHost }),
   currentSeq: 0,
   setCurrentSeq: (seq) => set({ currentSeq: seq }),
   isReady: false,
   setIsReady: (ready) => set({ isReady: ready }),
 }))
+
+// Helper functions to compute derived state
+export const useIsHost = () => {
+  const players = useRoomStore(state => state.players)
+  const nickname = useAuthStore(state => state.nickname)
+  const currentPlayer = players.find(p => p.nickname === nickname)
+  return currentPlayer?.isHost ?? false
+}
+
+export const useCurrentPlayer = () => {
+  const players = useRoomStore(state => state.players)
+  const nickname = useAuthStore(state => state.nickname)
+  return players.find(p => p.nickname === nickname) ?? null
+}
 
 interface RoomStore {
   roomCode: string
@@ -42,8 +55,6 @@ interface RoomStore {
   setPlayers: (players: Player[]) => void
   addPlayer: (player: Player) => void
   removePlayer: (playerId: string) => void
-  isHost: boolean
-  setIsHost: (isHost: boolean) => void
   currentSeq: number
   setCurrentSeq: (seq: number) => void
   isReady: boolean

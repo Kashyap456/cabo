@@ -59,7 +59,6 @@ export const useGameWebSocket = () => {
     addPlayer, 
     removePlayer, 
     setPlayers, 
-    setIsHost, 
     setPhase,
     currentSeq,
     setCurrentSeq,
@@ -134,9 +133,6 @@ export const useGameWebSocket = () => {
         }))
         setPlayers(players)
         setPhase(RoomPhase.WAITING)
-        
-        // Check if current user is host (we'd need to get current session ID)
-        // For now, we'll determine this from the players array
         break
       }
       

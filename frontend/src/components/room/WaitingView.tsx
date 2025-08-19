@@ -1,7 +1,10 @@
-import { useRoomStore } from '../../stores/game_state'
+import { useRoomStore, useIsHost } from '../../stores/game_state'
+import { useAuthStore } from '../../stores/auth'
 
 export default function WaitingView() {
-  const { players, isHost } = useRoomStore()
+  const { players } = useRoomStore()
+  const isHost = useIsHost()
+  const { nickname: currentNickname } = useAuthStore()
 
   return (
     <div className="space-y-6">
@@ -18,11 +21,18 @@ export default function WaitingView() {
                   {player.nickname.charAt(0).toUpperCase()}
                 </div>
                 <span className="font-medium">{player.nickname}</span>
-                {player.isHost && (
-                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-                    Host
-                  </span>
-                )}
+                <div className="flex gap-2">
+                  {player.nickname === currentNickname && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                      You
+                    </span>
+                  )}
+                  {player.isHost && (
+                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                      Host
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
             </div>
