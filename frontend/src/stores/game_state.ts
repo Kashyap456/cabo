@@ -12,13 +12,19 @@ export interface Player {
     isHost: boolean
 }
 
-export const useRoomStore = create<RoomStore>((set) => ({
+export const useRoomStore = create<RoomStore>((set, get) => ({
   roomCode: '',
   setRoomCode: (roomCode) => set({ roomCode }),
   phase: RoomPhase.WAITING,
   setPhase: (phase) => set({ phase }),
   players: [],
   setPlayers: (players) => set({ players }),
+  addPlayer: (player) => set((state) => ({ 
+    players: [...state.players, player] 
+  })),
+  removePlayer: (playerId) => set((state) => ({ 
+    players: state.players.filter(p => p.id !== playerId) 
+  })),
   isHost: false,
   setIsHost: (isHost) => set({ isHost }),
 }))
@@ -30,6 +36,8 @@ interface RoomStore {
   setPhase: (phase: RoomPhase) => void
   players: Player[]
   setPlayers: (players: Player[]) => void
+  addPlayer: (player: Player) => void
+  removePlayer: (playerId: string) => void
   isHost: boolean
   setIsHost: (isHost: boolean) => void
 }

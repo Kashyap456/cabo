@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import Room from '../components/room/Room'
 
 export const Route = createFileRoute('/$roomCode')({
   component: RouteComponent,
@@ -6,5 +7,5 @@ export const Route = createFileRoute('/$roomCode')({
 
 function RouteComponent() {
   const { roomCode } = Route.useParams()
-  return <div>Hello {roomCode}!</div>
+  return <Room roomCode={roomCode} />
 }

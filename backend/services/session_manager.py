@@ -21,22 +21,6 @@ class SessionManager:
         now = datetime.utcnow()
         expires_at = now + timedelta(days=ttl_days)
 
-        # Check if a session already exists for this nickname and deactivate it
-        # Since user_id is the primary key, we need to find existing sessions by nickname
-        # and deactivate them to ensure only one active session per user
-        existing_sessions = await self.session.execute(
-            select(UserSession).where(
-                UserSession.nickname == nickname,
-                UserSession.is_active == True
-            )
-        )
-        existing_sessions_list = existing_sessions.scalars().all()
-
-        # Deactivate existing sessions
-        for existing_session in existing_sessions_list:
-            existing_session.is_active = False
-            self.session.add(existing_session)
-
         # Create new session
         new_session = UserSession(
             user_id=user_id,

@@ -11,7 +11,8 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend development server
+    allow_origins=["http://localhost:3000",
+                   "http://127.0.0.1:3000",],  # Frontend development server
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
@@ -34,12 +35,14 @@ app.include_router(session.router)
 app.include_router(game.router)
 app.include_router(ws.ws_router)
 
+
 @app.get("/health-check")
 async def health_check():
     """Health check endpoint with database connectivity verification"""
     db_healthy = await check_database_connection()
-    
+
     if not db_healthy:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    
+        raise HTTPException(
+            status_code=500, detail="Database connection failed")
+
     return {}

@@ -13,7 +13,7 @@ class ConnectionManager:
         # session_id -> room_id (for quick lookups)
         self.session_to_room: Dict[str, str] = {}
     
-    async def add_to_room(self, session_id: str, room_id: str, websocket: WebSocket):
+    async def add_to_room(self, session_id: str, room_id: str, websocket: WebSocket, nickname: str = None, is_host: bool = False):
         """Add session WebSocket to room"""
         if room_id not in self.connections:
             self.connections[room_id] = {}
@@ -27,10 +27,14 @@ class ConnectionManager:
         
         logger.info(f"Session {session_id} joined room {room_id}")
         
-        # Notify others in room
+        # Notify others in room with player details
         await self.broadcast_to_room(room_id, {
             "type": "player_joined",
-            "session_id": session_id
+            "player": {
+                "id": session_id,
+                "nickname": nickname,
+                "isHost": is_host
+            }
         }, exclude_session=session_id)
     
     async def remove_from_room(self, session_id: str):

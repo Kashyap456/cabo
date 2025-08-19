@@ -1,4 +1,4 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import logging
@@ -45,37 +45,10 @@ async def authenticate_websocket(websocket: WebSocket, token: str, db: AsyncSess
     return session
 
 
-async def send_room_state(session_id: str, room: GameRoom, db: AsyncSession):
-    """Send current room state to a session"""
-    # Get all players in room
-    players = await room_manager.get_room_players(db, room.room_id)
-
-    room_state = {
-        "type": "room_state",
-        "room": {
-            "room_id": str(room.room_id),
-            "room_code": room.room_code,
-            "state": room.state.value,
-            "config": room.config,
-            "host_session_id": str(room.host_session_id) if room.host_session_id else None,
-            "players": [
-                {
-                    "user_id": str(p.user_id),
-                    "nickname": p.nickname,
-                    "is_host": str(p.user_id) == str(room.host_session_id)
-                }
-                for p in players
-            ]
-        }
-    }
-
-    await connection_manager.send_to_session(session_id, room_state)
-
-
 @ws_router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    token: str = Query(..., description="Session token"),
+    session_token: str = Cookie(...),
     db: AsyncSession = Depends(get_db)
 ):
     """WebSocket endpoint for real-time game communication"""
@@ -84,7 +57,8 @@ async def websocket_endpoint(
 
     try:
         # Authenticate
-        session = await authenticate_websocket(websocket, token, db)
+        print(session_token)
+        session = await authenticate_websocket(websocket, session_token, db)
         if not session:
             await websocket.close(code=4001, reason="Unauthorized")
             return
@@ -103,15 +77,12 @@ async def websocket_endpoint(
         if membership:
             room = await room_manager.get_room_by_id(db, str(membership.room_id))
             if room:
-                await connection_manager.add_to_room(session_id, str(room.room_id), websocket)
-                await send_room_state(session_id, room, db)
+                is_host = str(room.host_session_id) == session_id
+                await connection_manager.add_to_room(session_id, str(room.room_id), websocket, session.nickname, is_host)
         else:
             # Not in a room yet, just track the connection
-            await websocket.send_json({
-                "type": "connected",
-                "session_id": session_id,
-                "nickname": session.nickname
-            })
+            await websocket.close(code=4003, reason="Not in a room")
+            return
 
         # Main message loop
         while True:
