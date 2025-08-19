@@ -74,7 +74,7 @@ def serialize_player(session: UserSession) -> Dict[str, Any]:
     }
 
 
-@router.post("/create", response_model=CreateRoomResponse)
+@router.post("/", response_model=CreateRoomResponse)
 async def create_room(
     request: CreateRoomRequest,
     db: AsyncSession = Depends(get_db),

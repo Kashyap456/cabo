@@ -1,13 +1,13 @@
-import { Outlet, createRootRoute } from '@tanstack/react-router'
+import { Outlet, createRootRouteWithContext } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanstackDevtools } from '@tanstack/react-devtools'
+import { QueryClient } from '@tanstack/react-query'
 
-import Header from '../components/Header'
-
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient
+}>()({
   component: () => (
     <>
-      <Header />
       <Outlet />
       <TanstackDevtools
         config={{

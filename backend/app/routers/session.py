@@ -9,7 +9,7 @@ from app.models.session import UserSession
 from services.session_manager import SessionManager
 
 
-router = APIRouter(prefix="/sessions", tags=["sessions"])
+router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
 class CreateSessionRequest(BaseModel):
@@ -26,7 +26,7 @@ class SessionResponse(BaseModel):
     token: str
     expires_at: str
     created_at: str
-    
+
     class Config:
         from_attributes = True
 
@@ -43,7 +43,7 @@ async def get_current_session(
     """Dependency to get current session from cookie"""
     if not session_token:
         return None
-    
+
     try:
         token_uuid = uuid.UUID(session_token)
         session = await session_manager.validate_session(token_uuid)
@@ -64,13 +64,14 @@ async def create_session(
     """
     if not request.nickname or len(request.nickname.strip()) == 0:
         raise HTTPException(status_code=400, detail="Nickname cannot be empty")
-    
+
     if len(request.nickname) > 100:
-        raise HTTPException(status_code=400, detail="Nickname too long (max 100 characters)")
-    
+        raise HTTPException(
+            status_code=400, detail="Nickname too long (max 100 characters)")
+
     # Create new session
     session = await session_manager.create_session(request.nickname.strip())
-    
+
     # Set secure HTTP-only cookie
     response.set_cookie(
         key="session_token",
@@ -80,7 +81,7 @@ async def create_session(
         secure=False,  # Set to True in production with HTTPS
         samesite="lax"
     )
-    
+
     return SessionResponse(
         user_id=str(session.user_id),
         nickname=session.nickname,
@@ -99,8 +100,9 @@ async def validate_session(
     Returns session details if valid.
     """
     if not current_session:
-        raise HTTPException(status_code=401, detail="Invalid or missing session")
-    
+        raise HTTPException(
+            status_code=401, detail="Invalid or missing session")
+
     return SessionResponse(
         user_id=str(current_session.user_id),
         nickname=current_session.nickname,
@@ -120,23 +122,25 @@ async def update_nickname(
     Update the nickname for the current session without invalidating it.
     """
     if not current_session:
-        raise HTTPException(status_code=401, detail="Invalid or missing session")
-    
+        raise HTTPException(
+            status_code=401, detail="Invalid or missing session")
+
     if not request.nickname or len(request.nickname.strip()) == 0:
         raise HTTPException(status_code=400, detail="Nickname cannot be empty")
-    
+
     if len(request.nickname) > 100:
-        raise HTTPException(status_code=400, detail="Nickname too long (max 100 characters)")
-    
+        raise HTTPException(
+            status_code=400, detail="Nickname too long (max 100 characters)")
+
     # Update nickname
     updated_session = await session_manager.update_nickname(
-        current_session.user_id, 
+        current_session.user_id,
         request.nickname.strip()
     )
-    
+
     if not updated_session:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     return SessionResponse(
         user_id=str(updated_session.user_id),
         nickname=updated_session.nickname,
@@ -157,10 +161,10 @@ async def logout(
     """
     if current_session:
         await session_manager.invalidate_session(current_session.token)
-    
+
     # Clear the session cookie
     response.delete_cookie(key="session_token", samesite="lax")
-    
+
     return {"message": "Logged out successfully"}
 
 
@@ -174,14 +178,15 @@ async def refresh_session(
     Manually refresh the current session token and extend expiration.
     """
     if not current_session:
-        raise HTTPException(status_code=401, detail="Invalid or missing session")
-    
+        raise HTTPException(
+            status_code=401, detail="Invalid or missing session")
+
     # Refresh the session token
     refreshed_session = await session_manager.refresh_session_token(current_session.user_id)
-    
+
     if not refreshed_session:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     # Update the cookie with new token
     response.set_cookie(
         key="session_token",
@@ -191,7 +196,7 @@ async def refresh_session(
         secure=False,  # Set to True in production with HTTPS
         samesite="lax"
     )
-    
+
     return SessionResponse(
         user_id=str(refreshed_session.user_id),
         nickname=refreshed_session.nickname,
