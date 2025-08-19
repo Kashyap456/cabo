@@ -89,6 +89,7 @@ async def create_room(
             str(current_session.user_id),
             request.config
         )
+
         return CreateRoomResponse(
             room_code=room.room_code,
             room_id=str(room.room_id),
@@ -217,18 +218,22 @@ async def start_game(
         # Create CaboGame instance via GameOrchestrator
         if game_orchestrator:
             players = await room_manager.get_room_players(db, room.room_id)
-            await game_orchestrator.create_game(room, players)
+            await game_orchestrator.create_game(room, players, db)
 
         return {
             "success": True,
             "room": serialize_room(room)
         }
     except ValueError as e:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    finally:
+        await db.commit()
 
 
 @router.patch("/{room_code}/config")

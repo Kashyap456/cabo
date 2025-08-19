@@ -27,3 +27,15 @@ export const useJoinGame = () => {
     }
   })
 }
+
+export const useStartGame = () => {
+  return useMutation({
+    mutationFn: async (roomCode: string) => {
+      const response = await axios.post(`/rooms/${roomCode}/start`)
+      return response.data
+    },
+    onSuccess: (data) => {
+      console.log('Game started successfully:', data)
+    }
+  })
+}

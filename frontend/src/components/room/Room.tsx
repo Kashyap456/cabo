@@ -36,8 +36,8 @@ export default function Room({ roomCode }: RoomProps) {
           </div>
           <p className="text-red-600 mb-2">Connection failed</p>
           <p className="text-sm text-gray-500">{connectionStatus}</p>
-          <button 
-            onClick={() => window.location.reload()} 
+          <button
+            onClick={() => window.location.reload()}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             Retry Connection
@@ -51,7 +51,9 @@ export default function Room({ roomCode }: RoomProps) {
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-center mb-2">Room {roomCode}</h1>
+          <h1 className="text-3xl font-bold text-center mb-2">
+            Room {roomCode}
+          </h1>
           <div className="flex items-center justify-center gap-2">
             <div className="w-2 h-2 bg-green-500 rounded-full"></div>
             <span className="text-sm text-gray-600">Connected</span>
@@ -59,7 +61,7 @@ export default function Room({ roomCode }: RoomProps) {
         </div>
 
         {phase === RoomPhase.WAITING && <WaitingView />}
-        {phase === RoomPhase.PLAYING && (
+        {phase === RoomPhase.IN_GAME && (
           <div className="text-center">
             <p>Game is in progress...</p>
           </div>

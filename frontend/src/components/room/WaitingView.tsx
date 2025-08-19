@@ -1,10 +1,12 @@
 import { useRoomStore, useIsHost } from '../../stores/game_state'
 import { useAuthStore } from '../../stores/auth'
+import { useStartGame } from '../../api/rooms'
 
 export default function WaitingView() {
-  const { players } = useRoomStore()
+  const { players, roomCode } = useRoomStore()
   const isHost = useIsHost()
   const { nickname: currentNickname } = useAuthStore()
+  const startGameMutation = useStartGame()
 
   return (
     <div className="space-y-6">
@@ -58,10 +60,12 @@ export default function WaitingView() {
         <div className="bg-white rounded-lg shadow-md p-6">
           <h3 className="text-lg font-semibold mb-3">Host Controls</h3>
           <button
-            disabled={players.length < 2}
+            disabled={players.length < 2 || startGameMutation.isPending}
+            onClick={() => startGameMutation.mutate(roomCode)}
             className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
           >
-            {players.length < 2 ? 'Need at least 2 players' : 'Start Game'}
+            {startGameMutation.isPending ? 'Starting...' : 
+             players.length < 2 ? 'Need at least 2 players' : 'Start Game'}
           </button>
         </div>
       )}

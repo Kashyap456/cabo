@@ -3,7 +3,7 @@ import { useAuthStore } from './auth'
 
 export enum RoomPhase {
     WAITING = 'WAITING',
-    PLAYING = 'PLAYING',
+    IN_GAME = 'IN_GAME',
     ENDED = 'ENDED',
 }
 

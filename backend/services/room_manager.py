@@ -55,7 +55,8 @@ class RoomManager:
             # Get the current room information with relationships loaded
             current_room_result = await db.execute(
                 select(GameRoom)
-                .options(selectinload(GameRoom.user_memberships))
+                .options(selectinload(GameRoom.user_memberships)
+                         .selectinload(UserToRoom.user))
                 .where(GameRoom.room_id == membership.room_id)
             )
             current_room = current_room_result.scalar_one_or_none()
@@ -273,11 +274,10 @@ class RoomManager:
             raise ValueError(f"Need at least {min_players} players to start")
 
         # Start the game
-        room.phase = RoomPhase.PLAYING
+        room.phase = RoomPhase.IN_GAME
         room.game_started_at = datetime.utcnow()
         room.last_activity = datetime.utcnow()
 
-        await db.commit()
         return room
 
     async def get_room(self, db: AsyncSession, room_code: str) -> Optional[GameRoom]:

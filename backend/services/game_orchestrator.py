@@ -14,6 +14,7 @@ from services.game_manager import (
 )
 from services.connection_manager import ConnectionManager
 from app.models import GameRoom, UserSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class GameOrchestrator:
         self.game_tasks: Dict[str, asyncio.Task] = {}  # room_id -> Task
         self.connection_manager = connection_manager
 
-    async def create_game(self, room: GameRoom, players: List[UserSession]) -> None:
+    async def create_game(self, room: GameRoom, players: List[UserSession], db: AsyncSession) -> None:
         """Creates new CaboGame instance from room data"""
         room_id = str(room.room_id)
 
@@ -56,13 +57,9 @@ class GameOrchestrator:
         logger.info(
             f"Created game for room {room_id} with {len(players)} players")
 
-        # Send initial game state to all players
-        for player_id in player_ids:
-            game_state = game.get_game_state(player_id)
-            await self.connection_manager.send_to_session(player_id, {
-                "type": "game_state",
-                "data": game_state
-            })
+        # Send initial game playing checkpoint to all players
+        from app.routers.ws import broadcast_room_playing_checkpoint
+        await broadcast_room_playing_checkpoint(room, game.state, game.players, db)
 
     async def process_game_loop(self, room_id: str):
         """Main game loop - processes messages from queue"""
