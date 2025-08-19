@@ -5,11 +5,30 @@ import { useRoomStore, type Player } from '@/stores/game_state'
 
 export interface WebSocketMessage {
   type: string
+  seq_num?: number
+  timestamp?: string
   [key: string]: any
+}
+
+export interface RoomWaitingStateMessage extends WebSocketMessage {
+  type: 'room_waiting_state'
+  seq_num: number
+  room: {
+    room_id: string
+    room_code: string
+    config: any
+    host_session_id: string | null
+    players: Array<{
+      id: string
+      nickname: string
+      isHost: boolean
+    }>
+  }
 }
 
 export interface PlayerJoinedMessage extends WebSocketMessage {
   type: 'player_joined'
+  seq_num: number
   player: {
     id: string
     nickname: string
@@ -19,23 +38,34 @@ export interface PlayerJoinedMessage extends WebSocketMessage {
 
 export interface PlayerLeftMessage extends WebSocketMessage {
   type: 'player_left'
+  seq_num: number
   session_id: string
 }
 
-export interface ConnectedMessage extends WebSocketMessage {
-  type: 'connected'
-  session_id: string
-  nickname: string
+export interface ReadyMessage extends WebSocketMessage {
+  type: 'ready'
+  current_seq: number
 }
 
 export interface GameMessage extends WebSocketMessage {
   type: 'game_message'
+  seq_num: number
   from: string
   data: any
 }
 
 export const useGameWebSocket = () => {
-  const { addPlayer, removePlayer } = useRoomStore()
+  const { 
+    addPlayer, 
+    removePlayer, 
+    setPlayers, 
+    setIsHost, 
+    setPhase,
+    currentSeq,
+    setCurrentSeq,
+    isReady,
+    setIsReady
+  } = useRoomStore()
   const socketUrl = 'ws://localhost:8000/ws'
 
   const {
@@ -68,13 +98,45 @@ export const useGameWebSocket = () => {
     }
   }, [lastMessage])
 
+  // Send a message to the WebSocket
+  const sendWebSocketMessage = useCallback((message: WebSocketMessage) => {
+    if (readyState === ReadyState.OPEN) {
+      sendMessage(JSON.stringify(message))
+    } else {
+      console.warn('WebSocket not connected, cannot send message:', message)
+    }
+  }, [sendMessage, readyState])
+
   const handleMessage = useCallback((message: WebSocketMessage) => {
     console.log('Received WebSocket message:', message)
     
+    // Update sequence number if present
+    if (message.seq_num !== undefined) {
+      setCurrentSeq(message.seq_num)
+      
+      // Send acknowledgment for sequenced messages
+      sendWebSocketMessage({
+        type: 'ack_seq',
+        seq_num: message.seq_num
+      })
+    }
+    
     switch (message.type) {
-      case 'connected': {
-        const connectedMessage = message as ConnectedMessage
-        console.log(`Connected as ${connectedMessage.nickname}`)
+      case 'room_waiting_state': {
+        const waitingState = message as RoomWaitingStateMessage
+        console.log('Received room waiting state checkpoint')
+        
+        // Apply checkpoint state
+        const players = waitingState.room.players.map(p => ({
+          id: p.id,
+          nickname: p.nickname,
+          isHost: p.isHost
+        }))
+        setPlayers(players)
+        setPhase(RoomPhase.WAITING)
+        
+        // Check if current user is host (we'd need to get current session ID)
+        // For now, we'll determine this from the players array
         break
       }
       
@@ -97,6 +159,14 @@ export const useGameWebSocket = () => {
         break
       }
       
+      case 'ready': {
+        const readyMessage = message as ReadyMessage
+        console.log(`Room synchronized, ready at seq ${readyMessage.current_seq}`)
+        setCurrentSeq(readyMessage.current_seq)
+        setIsReady(true)
+        break
+      }
+      
       case 'game_message': {
         const gameMessage = message as GameMessage
         console.log('Game message from', gameMessage.from, ':', gameMessage.data)
@@ -111,16 +181,7 @@ export const useGameWebSocket = () => {
       default:
         console.log('Unhandled message type:', message.type)
     }
-  }, [addPlayer, removePlayer])
-
-  // Send a message to the WebSocket
-  const sendWebSocketMessage = useCallback((message: WebSocketMessage) => {
-    if (readyState === ReadyState.OPEN) {
-      sendMessage(JSON.stringify(message))
-    } else {
-      console.warn('WebSocket not connected, cannot send message:', message)
-    }
-  }, [sendMessage, readyState])
+  }, [addPlayer, removePlayer, setPlayers, setPhase, setCurrentSeq, setIsReady, sendWebSocketMessage])
 
   // Send ping to keep connection alive
   const sendPing = useCallback(() => {

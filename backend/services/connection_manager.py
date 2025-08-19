@@ -1,7 +1,8 @@
-from typing import Dict, Set, Optional, List
+from typing import Dict, Set, Optional, List, Any
 from fastapi import WebSocket
 import json
 import logging
+from .message_sequencer import MessageSequencer
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,8 @@ class ConnectionManager:
         self.connections: Dict[str, Dict[str, WebSocket]] = {}
         # session_id -> room_id (for quick lookups)
         self.session_to_room: Dict[str, str] = {}
+        # Message sequencer for handling checkpoints and sequence numbers
+        self.sequencer = MessageSequencer()
     
     async def add_to_room(self, session_id: str, room_id: str, websocket: WebSocket, nickname: str = None, is_host: bool = False):
         """Add session WebSocket to room"""
@@ -27,9 +30,8 @@ class ConnectionManager:
         
         logger.info(f"Session {session_id} joined room {room_id}")
         
-        # Notify others in room with player details
-        await self.broadcast_to_room(room_id, {
-            "type": "player_joined",
+        # Send sequenced message to others in room
+        await self.send_sequenced_message(room_id, "player_joined", {
             "player": {
                 "id": session_id,
                 "nickname": nickname,
@@ -55,9 +57,8 @@ class ConnectionManager:
         
         logger.info(f"Session {session_id} left room {room_id}")
         
-        # Notify others in room
-        await self.broadcast_to_room(room_id, {
-            "type": "player_left",
+        # Send sequenced message to others in room
+        await self.send_sequenced_message(room_id, "player_left", {
             "session_id": session_id
         })
     
@@ -124,5 +125,69 @@ class ConnectionManager:
                     await websocket.close()
                 except Exception as e:
                     logger.error(f"Error closing websocket for session {session_id}: {e}")
+            
+            # Clean up sequencer tracking
+            self.sequencer.remove_client(room_id, session_id)
         
         await self.remove_from_room(session_id)
+    
+    async def create_room_checkpoint(self, room_id: str, phase: str, data: Dict[str, Any]):
+        """Create a checkpoint for a room and broadcast to all clients"""
+        checkpoint = self.sequencer.create_checkpoint(room_id, phase, data)
+        checkpoint_message = checkpoint.to_dict()
+        
+        # Broadcast checkpoint to all clients in room
+        await self.broadcast_to_room(room_id, checkpoint_message)
+        logger.info(f"Broadcasted checkpoint for room {room_id}, phase {phase}")
+    
+    async def send_sequenced_message(self, room_id: str, message_type: str, data: Dict[str, Any], exclude_session: Optional[str] = None):
+        """Send a sequenced message to all clients in a room"""
+        sequenced_msg = self.sequencer.add_message(room_id, message_type, data)
+        message = sequenced_msg.to_dict()
+        
+        await self.broadcast_to_room(room_id, message, exclude_session)
+    
+    async def synchronize_client(self, room_id: str, session_id: str) -> bool:
+        """Send synchronization data to a reconnecting client"""
+        sync_data = self.sequencer.get_synchronization_data(room_id, session_id)
+        
+        if "error" in sync_data:
+            logger.warning(f"Cannot synchronize client {session_id} in room {room_id}: {sync_data['error']}")
+            return False
+        
+        websocket = self.connections.get(room_id, {}).get(session_id)
+        if not websocket:
+            logger.warning(f"No websocket found for session {session_id}")
+            return False
+        
+        try:
+            # Send checkpoint
+            await websocket.send_json(sync_data["checkpoint"])
+            
+            # Send missing messages in order
+            for message in sync_data["messages"]:
+                await websocket.send_json(message)
+            
+            # Send ready signal
+            await websocket.send_json({
+                "type": "ready",
+                "current_seq": sync_data["current_seq"]
+            })
+            
+            # Update client's acknowledged sequence
+            self.sequencer.set_client_sequence(room_id, session_id, sync_data["current_seq"])
+            
+            logger.info(f"Synchronized client {session_id} in room {room_id} up to seq {sync_data['current_seq']}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error synchronizing client {session_id}: {e}")
+            return False
+    
+    async def acknowledge_sequence(self, room_id: str, session_id: str, seq_num: int):
+        """Update client's acknowledged sequence number"""
+        self.sequencer.set_client_sequence(room_id, session_id, seq_num)
+    
+    def cleanup_room_sequencer(self, room_id: str):
+        """Clean up sequencer data when room is deleted"""
+        self.sequencer.cleanup_room(room_id)

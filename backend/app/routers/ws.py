@@ -7,6 +7,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.models import UserSession, GameRoom, UserToRoom
+from app.models.room import RoomPhase
 from services.connection_manager import ConnectionManager
 from services.room_manager import RoomManager
 
@@ -45,6 +46,31 @@ async def authenticate_websocket(websocket: WebSocket, token: str, db: AsyncSess
     return session
 
 
+async def create_room_waiting_checkpoint(room: GameRoom, db: AsyncSession):
+    """Create a waiting state checkpoint for the room"""
+    # Get all players in room
+    players = await room_manager.get_room_players(db, room.room_id)
+
+    checkpoint_data = {
+        "room": {
+            "room_id": str(room.room_id),
+            "room_code": room.room_code,
+            "config": room.config,
+            "host_session_id": str(room.host_session_id) if room.host_session_id else None,
+            "players": [
+                {
+                    "id": str(p.user_id),
+                    "nickname": p.nickname,
+                    "isHost": str(p.user_id) == str(room.host_session_id)
+                }
+                for p in players
+            ]
+        }
+    }
+
+    await connection_manager.create_room_checkpoint(str(room.room_id), "WAITING", checkpoint_data)
+
+
 @ws_router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -78,7 +104,16 @@ async def websocket_endpoint(
             room = await room_manager.get_room_by_id(db, str(membership.room_id))
             if room:
                 is_host = str(room.host_session_id) == session_id
+
+                # Add to room connections
                 await connection_manager.add_to_room(session_id, str(room.room_id), websocket, session.nickname, is_host)
+
+                # Create/update room checkpoint for waiting state
+                if room.phase == RoomPhase.WAITING:
+                    await create_room_waiting_checkpoint(room, db)
+
+                # Synchronize client with current state
+                await connection_manager.synchronize_client(str(room.room_id), session_id)
         else:
             # Not in a room yet, just track the connection
             await websocket.close(code=4003, reason="Not in a room")
@@ -161,6 +196,21 @@ async def handle_lobby_message(websocket: WebSocket, session: UserSession, messa
             "nickname": session.nickname,
             "room_id": str(current_membership.room_id) if current_membership else None
         })
+    elif msg_type == "ack_seq":
+        # Handle sequence acknowledgment
+        seq_num = message.get("seq_num")
+        if seq_num is not None:
+            # Get user's room
+            membership_result = await db.execute(
+                select(UserToRoom).where(UserToRoom.user_id == session.user_id)
+            )
+            current_membership = membership_result.scalar_one_or_none()
+            if current_membership:
+                await connection_manager.acknowledge_sequence(
+                    str(current_membership.room_id),
+                    str(session.user_id),
+                    seq_num
+                )
     else:
         await websocket.send_json({
             "type": "error",

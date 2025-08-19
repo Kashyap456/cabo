@@ -27,6 +27,10 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
   })),
   isHost: false,
   setIsHost: (isHost) => set({ isHost }),
+  currentSeq: 0,
+  setCurrentSeq: (seq) => set({ currentSeq: seq }),
+  isReady: false,
+  setIsReady: (ready) => set({ isReady: ready }),
 }))
 
 interface RoomStore {
@@ -40,4 +44,8 @@ interface RoomStore {
   removePlayer: (playerId: string) => void
   isHost: boolean
   setIsHost: (isHost: boolean) => void
+  currentSeq: number
+  setCurrentSeq: (seq: number) => void
+  isReady: boolean
+  setIsReady: (ready: boolean) => void
 }

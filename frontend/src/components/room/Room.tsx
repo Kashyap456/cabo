@@ -8,19 +8,19 @@ interface RoomProps {
 }
 
 export default function Room({ roomCode }: RoomProps) {
-  const { phase, setRoomCode } = useRoomStore()
+  const { phase, setRoomCode, isReady } = useRoomStore()
   const { isConnected, isConnecting, connectionStatus } = useGameWebSocket()
 
   useEffect(() => {
     setRoomCode(roomCode)
   }, [roomCode, setRoomCode])
 
-  if (isConnecting) {
+  if (isConnecting || (isConnected && !isReady)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p>Connecting to game...</p>
+          <p>{isConnecting ? 'Connecting to game...' : 'Synchronizing...'}</p>
           <p className="text-sm text-gray-500">{connectionStatus}</p>
         </div>
       </div>
