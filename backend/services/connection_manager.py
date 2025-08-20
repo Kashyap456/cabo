@@ -316,7 +316,8 @@ class ConnectionManager:
         # Check if session reconnected
         if session_id in self.session_to_connection:
             connection_id = self.session_to_connection[session_id]
-            if self.connections.get(connection_id, {}).get('state') == 'active':
+            conn_info = self.connections.get(connection_id)
+            if conn_info and conn_info.state == 'active':
                 # Session reconnected, nothing to do
                 return
         

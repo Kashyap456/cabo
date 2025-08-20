@@ -203,11 +203,19 @@ class RedisGameStore:
             # Restore pending timeouts
             if 'pending_timeouts' in meta:
                 try:
-                    game.pending_timeouts = meta['pending_timeouts']
-                except:
-                    game.pending_timeouts = []
-            
-            logger.info(f"Loaded game state for room {room_id}")
+                    # Check if it's already a dict or needs JSON parsing
+                    pt = meta['pending_timeouts']
+                    if isinstance(pt, str):
+                        game.pending_timeouts = json.loads(pt)
+                    elif isinstance(pt, dict):
+                        game.pending_timeouts = pt
+                    else:
+                        game.pending_timeouts = {}
+                except Exception as e:
+                    logger.warning(f"Failed to parse pending_timeouts: {e}")
+                    game.pending_timeouts = {}
+            else:
+                game.pending_timeouts = {}
             return game, room_code
             
         except Exception as e:
