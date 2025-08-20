@@ -5,7 +5,7 @@ import logging
 import json
 from typing import Optional
 
-from app.core.database import get_db
+from app.core.database import get_db, async_session_maker
 from app.models import UserSession, GameRoom, UserToRoom
 from app.models.room import RoomPhase
 from services.connection_manager import ConnectionManager
@@ -84,6 +84,15 @@ def serialize_card_for_player(card, viewer_id: str, owner_id: str, card_index: i
     if owner_id in ["discard", "played"]:
         return {
             "id": f"{owner_id}_{card_index}" if owner_id == "discard" else "played_card",
+            "rank": card.rank.value if hasattr(card.rank, 'value') else card.rank,
+            "suit": card.suit.value if card.suit and hasattr(card.suit, 'value') else card.suit,
+            "isTemporarilyViewed": False
+        }
+    
+    # Drawn card is visible to the player who drew it
+    if owner_id == "drawn":
+        return {
+            "id": f"drawn_{viewer_id}",
             "rank": card.rank.value if hasattr(card.rank, 'value') else card.rank,
             "suit": card.suit.value if card.suit and hasattr(card.suit, 'value') else card.suit,
             "isTemporarilyViewed": False
@@ -171,49 +180,59 @@ async def broadcast_room_playing_checkpoint(room: GameRoom, game_state, players,
 async def websocket_endpoint(
     websocket: WebSocket,
     session_token: str = Cookie(...),
-    db: AsyncSession = Depends(get_db)
 ):
     """WebSocket endpoint for real-time game communication"""
+    from app.core.database import async_session_maker
+    
+    logger.info(f"New WebSocket connection from {websocket.client.host}:{websocket.client.port}")
+    
     session = None
     session_id = None
+    connection_id = None
+    room_id = None  # Cache room ID to avoid repeated queries
 
     try:
-        # Authenticate
-        session = await authenticate_websocket(websocket, session_token, db)
-        if not session:
-            await websocket.close(code=4001, reason="Unauthorized")
-            return
+        # Authenticate with a temporary DB connection
+        async with async_session_maker() as db:
+            session = await authenticate_websocket(websocket, session_token, db)
+            if not session:
+                await websocket.close(code=4001, reason="Unauthorized")
+                return
 
-        session_id = str(session.user_id)
+            session_id = str(session.user_id)
 
         # Accept connection
         await websocket.accept()
-        logger.info(f"WebSocket connection accepted for session {session_id}")
+        logger.info(f"WebSocket connection accepted for session {session_id} from {websocket.client}")
 
-        # Check if session is in a room and add to room connections
-        membership_result = await db.execute(
-            select(UserToRoom).where(UserToRoom.user_id == session.user_id)
-        )
-        membership = membership_result.scalar_one_or_none()
-        if membership:
-            room = await room_manager.get_room_by_id(db, str(membership.room_id))
-            if room:
-                is_host = str(room.host_session_id) == session_id
-                # Add to room connections
-                await connection_manager.add_to_room(session_id, str(room.room_id), websocket, session.nickname, is_host)
+        # Check if session is in a room and add to room connections (with new DB connection)
+        async with async_session_maker() as db:
+            membership_result = await db.execute(
+                select(UserToRoom).where(UserToRoom.user_id == session.user_id)
+            )
+            membership = membership_result.scalar_one_or_none()
+            if membership:
+                room = await room_manager.get_room_by_id(db, str(membership.room_id))
+                if room:
+                    room_id = str(room.room_id)  # Cache room ID
+                    is_host = str(room.host_session_id) == session_id
+                    # Always treat as new connection here (reconnection is handled internally)
+                    is_reconnection = False
+                    # Add to room connections and get connection ID
+                    connection_id = await connection_manager.add_to_room(session_id, room_id, websocket, session.nickname, is_host, is_reconnection)
 
-                # Create/update room checkpoint for waiting state
-                if room.phase == RoomPhase.WAITING:
-                    await create_room_waiting_checkpoint(room, db)
-                elif room.phase == RoomPhase.IN_GAME:
-                    await game_orchestrator._create_player_checkpoint(str(room.room_id), session_id)
+                    # Create/update room checkpoint for waiting state
+                    if room.phase == RoomPhase.WAITING:
+                        await create_room_waiting_checkpoint(room, db)
+                    elif room.phase == RoomPhase.IN_GAME:
+                        await game_orchestrator._create_player_checkpoint(room_id, session_id)
 
-                # Synchronize client with current state
-                await connection_manager.synchronize_client(str(room.room_id), session_id)
-        else:
-            # Not in a room yet, just track the connection
-            await websocket.close(code=4003, reason="Not in a room")
-            return
+                    # Synchronize client with current state
+                    await connection_manager.synchronize_client(room_id, session_id)
+            else:
+                # Not in a room yet, just track the connection
+                await websocket.close(code=4003, reason="Not in a room")
+                return
 
         # Main message loop
         while True:
@@ -225,33 +244,50 @@ async def websocket_endpoint(
                 logger.debug(
                     f"Received message from {session_id}: {message.get('type')}")
 
-                # Route message based on type
-                # Check if session is in a room for game messages
-                membership_result = await db.execute(
-                    select(UserToRoom).where(
-                        UserToRoom.user_id == session.user_id)
-                )
-                membership = membership_result.scalar_one_or_none()
-                if membership and room.phase == RoomPhase.IN_GAME:
+                # Handle ping/pong messages directly (don't route to game)
+                msg_type = message.get("type")
+                if msg_type == "ping":
+                    await websocket.send_json({"type": "pong"})
+                    if connection_id:
+                        await connection_manager.handle_ping(connection_id)
+                elif msg_type == "pong":
+                    # Handle client pong response
+                    await connection_manager.handle_pong(session_id)
+                # Route other messages based on game state
+                elif room_id and await game_orchestrator.is_game_active_async(room_id):
                     # Route game messages to orchestrator
                     await game_orchestrator.handle_player_message(
-                        str(membership.room_id), session_id, message
+                        room_id, session_id, message
                     )
                 else:
-                    # Handle lobby/non-game messages
-                    await handle_lobby_message(websocket, session, message, db)
+                    # Handle lobby/non-game messages (need DB for certain operations)
+                    async with async_session_maker() as db:
+                        await handle_lobby_message(websocket, session, message, db, connection_id)
 
+            except WebSocketDisconnect:
+                # Client disconnected, exit the loop
+                break
             except json.JSONDecodeError:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Invalid JSON"
-                })
+                # Only try to send error if connection is still open
+                try:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Invalid JSON"
+                    })
+                except:
+                    # Connection likely closed, exit
+                    break
             except Exception as e:
                 logger.error(f"Error handling message from {session_id}: {e}")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": str(e)
-                })
+                # Only try to send error if connection is still open
+                try:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": str(e)
+                    })
+                except:
+                    # Connection likely closed, exit
+                    break
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session {session_id}")
@@ -263,13 +299,12 @@ async def websocket_endpoint(
             await connection_manager.disconnect_session(session_id)
 
 
-async def handle_lobby_message(websocket: WebSocket, session: UserSession, message: dict, db: AsyncSession):
+async def handle_lobby_message(websocket: WebSocket, session: UserSession, message: dict, db: AsyncSession, connection_id: str = None):
     """Handle messages when not in a game"""
     msg_type = message.get("type")
 
-    if msg_type == "ping":
-        await websocket.send_json({"type": "pong"})
-    elif msg_type == "get_session_info":
+    # ping/pong are now handled at the main message loop level
+    if msg_type == "get_session_info":
         # Check current room membership for session info
         membership_result = await db.execute(
             select(UserToRoom).where(UserToRoom.user_id == session.user_id)

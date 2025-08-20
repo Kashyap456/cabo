@@ -56,7 +56,36 @@ class Card:
     def __str__(self) -> str:
         if self.rank == Rank.JOKER:
             return "Joker"
-        return f"{self.rank.name} of {self.suit.value}"
+        
+        # Map rank to short format
+        rank_map = {
+            Rank.ACE: 'A',
+            Rank.TWO: '2',
+            Rank.THREE: '3',
+            Rank.FOUR: '4',
+            Rank.FIVE: '5',
+            Rank.SIX: '6',
+            Rank.SEVEN: '7',
+            Rank.EIGHT: '8',
+            Rank.NINE: '9',
+            Rank.TEN: '10',
+            Rank.JACK: 'J',
+            Rank.QUEEN: 'Q',
+            Rank.KING: 'K'
+        }
+        
+        # Map suit to symbol
+        suit_map = {
+            Suit.HEARTS: '♥',
+            Suit.DIAMONDS: '♦',
+            Suit.CLUBS: '♣',
+            Suit.SPADES: '♠'
+        }
+        
+        rank_str = rank_map.get(self.rank, str(self.rank.value))
+        suit_str = suit_map.get(self.suit, '?')
+        
+        return f"{rank_str}{suit_str}"
 
 
 class Deck:
@@ -476,7 +505,7 @@ class CaboGame:
             "success": True,
             "event": GameEvent("card_drawn", {
                 "player_id": message.player_id,
-                "card": str(card) if message.player_id == current_player.player_id else "hidden"
+                "card": str(card)  # Always pass the actual card, orchestrator handles visibility
             })
         }
 
@@ -513,6 +542,15 @@ class CaboGame:
             self.state.phase = GamePhase.TURN_TRANSITION
             self.state.turn_transition_timer_id = self._schedule_timeout(
                 TurnTransitionTimeoutMessage(), 5.0)
+            
+            # Broadcast phase change so clients know we're in transition
+            return {
+                "success": True,
+                "event": GameEvent("game_phase_changed", {
+                    "phase": "turn_transition",
+                    "current_player": self.get_current_player().player_id
+                })
+            }
 
         return {
             "success": True,
@@ -562,6 +600,15 @@ class CaboGame:
             self.state.phase = GamePhase.TURN_TRANSITION
             self.state.turn_transition_timer_id = self._schedule_timeout(
                 TurnTransitionTimeoutMessage(), 5.0)
+            
+            # Broadcast phase change so clients know we're in transition
+            return {
+                "success": True,
+                "event": GameEvent("game_phase_changed", {
+                    "phase": "turn_transition",
+                    "current_player": self.get_current_player().player_id
+                })
+            }
 
         return {
             "success": True,
@@ -836,6 +883,15 @@ class CaboGame:
             self.state.phase = GamePhase.TURN_TRANSITION
             self.state.turn_transition_timer_id = self._schedule_timeout(
                 TurnTransitionTimeoutMessage(), 5.0)
+            
+            # Broadcast phase change
+            return {
+                "success": True,
+                "event": GameEvent("game_phase_changed", {
+                    "phase": "turn_transition",
+                    "current_player": self.get_current_player().player_id
+                })
+            }
 
     def _get_special_action_type(self, card: Card) -> str:
         """Get the type of special action for a card"""

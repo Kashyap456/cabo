@@ -72,12 +72,20 @@ export default function ActionPanel() {
 
 function DrawCardButton() {
   const { sendMessage } = useGameWebSocket()
+  const { drawnCard, phase, currentPlayerId } = useGamePlayStore()
+  const { sessionId } = useAuthStore()
+  const isMyTurn = sessionId === currentPlayerId
 
   const handleClick = useCallback(() => {
-    sendMessage({
-      type: 'draw_card',
-    })
-  }, [sendMessage])
+    if (isMyTurn && phase === GamePhase.PLAYING && !drawnCard) {
+      console.log('Drawing card')
+      sendMessage({
+        type: 'draw_card',
+      })
+    } else {
+      console.log('Cannot draw card:', { isMyTurn, phase, hasDrawnCard: !!drawnCard })
+    }
+  }, [sendMessage, isMyTurn, phase, drawnCard])
 
   return (
     <button
@@ -91,12 +99,20 @@ function DrawCardButton() {
 
 function PlayDrawnCardButton() {
   const { sendMessage } = useGameWebSocket()
+  const { drawnCard, phase, currentPlayerId } = useGamePlayStore()
+  const { sessionId } = useAuthStore()
+  const isMyTurn = sessionId === currentPlayerId
 
   const handleClick = useCallback(() => {
-    sendMessage({
-      type: 'play_drawn_card',
-    })
-  }, [sendMessage])
+    if (isMyTurn && phase === GamePhase.PLAYING && drawnCard) {
+      console.log('Playing drawn card:', drawnCard)
+      sendMessage({
+        type: 'play_drawn_card',
+      })
+    } else {
+      console.log('Cannot play drawn card:', { isMyTurn, phase, hasDrawnCard: !!drawnCard })
+    }
+  }, [sendMessage, isMyTurn, phase, drawnCard])
 
   return (
     <button

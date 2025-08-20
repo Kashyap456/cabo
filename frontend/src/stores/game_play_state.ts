@@ -105,6 +105,8 @@ export interface GamePlayState {
   setPendingStackCall: (stackCall: StackCall | null) => void
   clearStackCalls: () => void
   setCalledCabo: (playerId: string) => void
+  resetGameState: () => void
+  setDiscardPile: (cards: Card[]) => void
   
   // Helper functions
   getCurrentPlayer: () => PlayerGameState | null
@@ -129,7 +131,14 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   finalRoundStarted: false,
   
   // Actions
-  setCurrentPlayer: (playerId) => set({ currentPlayerId: playerId }),
+  setCurrentPlayer: (playerId) => set((state) => {
+    // Clear drawn card when turn changes to a different player
+    const shouldClearDrawnCard = state.currentPlayerId !== playerId
+    return {
+      currentPlayerId: playerId,
+      drawnCard: shouldClearDrawnCard ? null : state.drawnCard
+    }
+  }),
   setPhase: (phase) => set({ phase }),
   setPlayers: (players) => set({ players }),
   
@@ -144,7 +153,10 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     topDiscardCard: card
   })),
   
-  setDrawnCard: (card) => set({ drawnCard: card }),
+  setDrawnCard: (card) => set((state) => {
+    console.log('Setting drawn card:', card)
+    return { drawnCard: card }
+  }),
   
   setSpecialAction: (action) => set({ specialAction: action }),
   
@@ -168,6 +180,26 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     caboCalledBy: playerId,
     finalRoundStarted: true
   })),
+  
+  resetGameState: () => set({
+    currentPlayerId: '',
+    phase: GamePhase.SETUP,
+    turnNumber: 1,
+    players: [],
+    discardPile: [],
+    topDiscardCard: null,
+    drawnCard: null,
+    specialAction: null,
+    stackCalls: [],
+    pendingStackCall: null,
+    caboCalledBy: null,
+    finalRoundStarted: false
+  }),
+  
+  setDiscardPile: (cards) => set({
+    discardPile: cards,
+    topDiscardCard: cards.length > 0 ? cards[cards.length - 1] : null
+  }),
   
   // Helper functions
   getCurrentPlayer: () => {

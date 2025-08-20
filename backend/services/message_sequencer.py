@@ -116,9 +116,14 @@ class MessageSequencer:
             f"Added message to room {room_id}: {message_type} seq {seq_num}")
         return message
 
-    def create_player_checkpoint(self, room_id: str, session_id: str, phase: str, data: Dict[str, Any]) -> RoomCheckpoint:
+    def create_player_checkpoint(self, room_id: str, session_id: str, phase: str, data: Dict[str, Any], increment_seq: bool = False) -> RoomCheckpoint:
         """Create a new personalized checkpoint for a specific player"""
-        seq_num = self.get_next_sequence(room_id)
+        # Use current sequence number without incrementing (unless explicitly requested)
+        if increment_seq:
+            seq_num = self.get_next_sequence(room_id)
+        else:
+            seq_num = self.room_sequences.get(room_id, 0)
+        
         timestamp = datetime.utcnow()
 
         checkpoint = RoomCheckpoint(
@@ -158,6 +163,9 @@ class MessageSequencer:
         self.client_sequences[room_id][session_id] = seq_num
         logger.debug(
             f"Client {session_id} in room {room_id} acked seq {seq_num}")
+        
+        # Clean up old messages from buffer if all clients have acknowledged them
+        self._cleanup_acknowledged_messages(room_id)
 
     def get_client_sequence(self, room_id: str, session_id: str) -> int:
         """Get the last acknowledged sequence number for a client (0 if new)"""
@@ -205,3 +213,25 @@ class MessageSequencer:
             "messages": [msg.to_dict() for msg in missing_messages],
             "current_seq": self.room_sequences.get(room_id, 0)
         }
+    
+    def _cleanup_acknowledged_messages(self, room_id: str):
+        """Remove messages that all clients have acknowledged"""
+        if room_id not in self.client_sequences or room_id not in self.message_buffers:
+            return
+        
+        client_sequences = self.client_sequences[room_id]
+        if not client_sequences:
+            return
+        
+        # Find the minimum acknowledged sequence across all clients
+        min_acked_seq = min(client_sequences.values())
+        
+        # Keep only messages after the minimum acknowledged sequence
+        original_buffer = self.message_buffers[room_id]
+        self.message_buffers[room_id] = [
+            msg for msg in original_buffer if msg.seq_num > min_acked_seq
+        ]
+        
+        cleaned_count = len(original_buffer) - len(self.message_buffers[room_id])
+        if cleaned_count > 0:
+            logger.debug(f"Cleaned {cleaned_count} acknowledged messages from room {room_id} buffer")

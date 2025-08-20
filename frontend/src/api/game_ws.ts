@@ -1,5 +1,6 @@
 import useWebSocket, { ReadyState } from 'react-use-websocket'
 import { useCallback, useEffect } from 'react'
+import * as React from 'react'
 
 import { useRoomStore, type Player, RoomPhase } from '@/stores/game_state'
 import { useGamePlayStore, GamePhase, Suit, type Card as GameCard } from '@/stores/game_play_state'
@@ -62,6 +63,12 @@ export interface RoomPlayingStateMessage extends WebSocketMessage {
       suit: string | '?' | null
       isTemporarilyViewed?: boolean
     } | null
+    drawn_card: {
+      id: string
+      rank: number | '?'
+      suit: string | '?' | null
+      isTemporarilyViewed?: boolean
+    } | null
     special_action: {
       type: string
       player_id: string
@@ -117,7 +124,9 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     addStackCall,
     clearStackCalls,
     setCalledCabo,
-    getPlayerById
+    getPlayerById,
+    updatePlayerCards,
+    setPlayers
   } = useGamePlayStore.getState()
 
   const convertCard = (card: any): GameCard => ({
@@ -126,6 +135,36 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     suit: card.suit,
     isTemporarilyViewed: card.isTemporarilyViewed || false
   })
+
+  // Helper function to parse card strings from backend (e.g., "3♥", "K♠", "Joker")
+  const parseCardString = (cardStr: string): GameCard => {
+    if (cardStr === 'Joker') {
+      return {
+        id: 'parsed_card',
+        rank: 0, // Joker
+        suit: null,
+        isTemporarilyViewed: false
+      }
+    } else {
+      // Extract rank and suit from string
+      const suitSymbols = { '♥': Suit.HEARTS, '♦': Suit.DIAMONDS, '♣': Suit.CLUBS, '♠': Suit.SPADES }
+      const lastChar = cardStr.slice(-1)
+      const suit = suitSymbols[lastChar as keyof typeof suitSymbols] || Suit.HEARTS
+      const rankStr = cardStr.slice(0, -1)
+      let rank = parseInt(rankStr)
+      if (isNaN(rank)) {
+        // Handle face cards
+        const faceCards = { 'A': 1, 'J': 11, 'Q': 12, 'K': 13 }
+        rank = faceCards[rankStr as keyof typeof faceCards] || 1
+      }
+      return {
+        id: 'parsed_card',
+        rank,
+        suit,
+        isTemporarilyViewed: false
+      }
+    }
+  }
 
   switch (gameEvent.event_type) {
     case 'game_started': {
@@ -145,76 +184,79 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'turn_changed': {
       console.log('Turn changed to player:', gameEvent.data.current_player_name)
+      const currentUserId = useAuthStore.getState().sessionId
       setCurrentPlayer(gameEvent.data.current_player)
-      // Clear drawn card when turn changes (in case it wasn't used)
-      setDrawnCard(null)
+      
+      // Clear drawn card if it's not our turn anymore
+      if (gameEvent.data.current_player !== currentUserId) {
+        setDrawnCard(null)
+      }
       break
     }
 
     case 'card_drawn': {
       console.log('Card drawn by player:', gameEvent.data.player_id)
-      // If the card is visible (not "hidden"), store it in drawn card state
-      if (gameEvent.data.card && gameEvent.data.card !== 'hidden') {
-        // Parse card from backend string format (e.g., "3♥" or card object)
-        if (typeof gameEvent.data.card === 'string') {
-          // Parse string format like "3♥", "K♠", "Joker"
-          const cardStr = gameEvent.data.card
-          if (cardStr === 'Joker') {
-            setDrawnCard({
-              id: 'drawn_card',
-              rank: 0, // Joker
-              suit: null,
-              isTemporarilyViewed: false
-            })
-          } else {
-            // Extract rank and suit from string
-            const suitSymbols = { '♥': Suit.HEARTS, '♦': Suit.DIAMONDS, '♣': Suit.CLUBS, '♠': Suit.SPADES }
-            const lastChar = cardStr.slice(-1)
-            const suit = suitSymbols[lastChar as keyof typeof suitSymbols] || Suit.HEARTS
-            const rankStr = cardStr.slice(0, -1)
-            let rank = parseInt(rankStr)
-            if (isNaN(rank)) {
-              // Handle face cards
-              const faceCards = { 'A': 1, 'J': 11, 'Q': 12, 'K': 13 }
-              rank = faceCards[rankStr as keyof typeof faceCards] || 1
-            }
-            setDrawnCard({
-              id: 'drawn_card',
-              rank,
-              suit,
-              isTemporarilyViewed: false
-            })
-          }
-        } else if (typeof gameEvent.data.card === 'object') {
-          // Card is already in object format
-          setDrawnCard(convertCard(gameEvent.data.card))
+      const currentUserId = useAuthStore.getState().sessionId
+      
+      // Only set drawn card if it's the current user and card is visible
+      if (gameEvent.data.player_id === currentUserId && gameEvent.data.card && gameEvent.data.card !== 'hidden') {
+        const cardData = gameEvent.data.card
+        if (typeof cardData === 'string') {
+          // Parse card string from backend (e.g., "3♥", "K♠", "Joker")
+          const parsedCard = parseCardString(cardData)
+          setDrawnCard({ ...parsedCard, id: `drawn_${gameEvent.data.player_id}_${Date.now()}` })
+        } else if (typeof cardData === 'object') {
+          // Handle object format (fallback)
+          setDrawnCard({ ...convertCard(cardData), id: `drawn_${gameEvent.data.player_id}_${Date.now()}` })
         }
+      } else if (gameEvent.data.player_id !== currentUserId) {
+        // Clear drawn card when another player draws
+        setDrawnCard(null)
       }
       break
     }
 
     case 'card_played': {
-      console.log('Card played:', gameEvent.data.card)
+      console.log('Card played:', gameEvent.data.card, 'by player:', gameEvent.data.player_id)
+      const currentUserId = useAuthStore.getState().sessionId
+      
       if (gameEvent.data.card && gameEvent.data.card !== 'hidden') {
-        // Parse card string and add to discard pile
-        // This would need proper card parsing from backend format
         const cardData = gameEvent.data.card
-        if (typeof cardData === 'object') {
+        if (typeof cardData === 'string') {
+          // Parse card string from backend (e.g., "3♥", "K♠", "Joker")
+          addCardToDiscard(parseCardString(cardData))
+        } else if (typeof cardData === 'object') {
+          // Handle object format (fallback)
           addCardToDiscard(convertCard(cardData))
         }
       }
-      // Clear drawn card since it was played
-      setDrawnCard(null)
+      
+      // Clear drawn card if the current player played a card
+      if (gameEvent.data.player_id === currentUserId) {
+        setDrawnCard(null)
+      }
       break
     }
 
-    case 'card_replaced_and_play': {
+    case 'card_replaced_and_played': {
       console.log('Card replaced and played by:', gameEvent.data.player_id)
-      if (gameEvent.data.played_card && typeof gameEvent.data.played_card === 'object') {
-        addCardToDiscard(convertCard(gameEvent.data.played_card))
+      const currentUserId = useAuthStore.getState().sessionId
+      
+      if (gameEvent.data.played_card) {
+        const cardData = gameEvent.data.played_card
+        if (typeof cardData === 'string') {
+          // Parse card string from backend (e.g., "3♥", "K♠", "Joker")
+          addCardToDiscard(parseCardString(cardData))
+        } else if (typeof cardData === 'object') {
+          // Handle object format (fallback)
+          addCardToDiscard(convertCard(cardData))
+        }
       }
-      // Clear drawn card since it was used in replace and play
-      setDrawnCard(null)
+      
+      // Clear drawn card if the current player used replace and play
+      if (gameEvent.data.player_id === currentUserId) {
+        setDrawnCard(null)
+      }
       break
     }
 
@@ -260,7 +302,29 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'card_viewed': {
       console.log('Card viewed by:', gameEvent.data.player)
-      // Card viewing is handled by temporary visibility in game state
+      // Update the specific card to show it was viewed if we have the data
+      if (gameEvent.data.player_id && gameEvent.data.card_index !== undefined && gameEvent.data.card) {
+        const player = getPlayerById(gameEvent.data.player_id)
+        if (player) {
+          const updatedCards = [...player.cards]
+          if (updatedCards[gameEvent.data.card_index]) {
+            const viewedCard = convertCard(gameEvent.data.card)
+            updatedCards[gameEvent.data.card_index] = { ...viewedCard, isTemporarilyViewed: true }
+            updatePlayerCards(gameEvent.data.player_id, updatedCards)
+            
+            // Clear the temporary view after a few seconds
+            setTimeout(() => {
+              const currentPlayer = getPlayerById(gameEvent.data.player_id)
+              if (currentPlayer) {
+                const resetCards = currentPlayer.cards.map(card => 
+                  card.id === viewedCard.id ? { ...card, isTemporarilyViewed: false } : card
+                )
+                updatePlayerCards(gameEvent.data.player_id, resetCards)
+              }
+            }, 3000)
+          }
+        }
+      }
       break
     }
 
@@ -272,7 +336,13 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'cards_swapped': {
       console.log('Cards swapped between:', gameEvent.data.player, 'and', gameEvent.data.target)
-      // Card swapping is handled by game state updates
+      // Update player cards if the data includes the new card states
+      if (gameEvent.data.updated_players) {
+        gameEvent.data.updated_players.forEach((playerData: any) => {
+          const cards = playerData.cards.map(convertCard)
+          updatePlayerCards(playerData.id, cards)
+        })
+      }
       break
     }
 
@@ -339,9 +409,41 @@ export const useGameWebSocket = () => {
     setPhase: setGamePhase,
     setPlayers: setGamePlayers,
     addCardToDiscard,
+    setDrawnCard,
     setSpecialAction,
     addStackCall
   } = useGamePlayStore()
+  
+  
+  // Helper function to parse card strings from backend (e.g., "3♥", "K♠", "Joker")
+  const parseCardString = (cardStr: string): GameCard => {
+    if (cardStr === 'Joker') {
+      return {
+        id: 'parsed_card',
+        rank: 0, // Joker
+        suit: null,
+        isTemporarilyViewed: false
+      }
+    } else {
+      // Extract rank and suit from string
+      const suitSymbols = { '♥': Suit.HEARTS, '♦': Suit.DIAMONDS, '♣': Suit.CLUBS, '♠': Suit.SPADES }
+      const lastChar = cardStr.slice(-1)
+      const suit = suitSymbols[lastChar as keyof typeof suitSymbols] || Suit.HEARTS
+      const rankStr = cardStr.slice(0, -1)
+      let rank = parseInt(rankStr)
+      if (isNaN(rank)) {
+        // Handle face cards
+        const faceCards = { 'A': 1, 'J': 11, 'Q': 12, 'K': 13 }
+        rank = faceCards[rankStr as keyof typeof faceCards] || 1
+      }
+      return {
+        id: 'parsed_card',
+        rank,
+        suit,
+        isTemporarilyViewed: false
+      }
+    }
+  }
   
   const socketUrl = 'ws://localhost:8000/ws'
 
@@ -351,6 +453,7 @@ export const useGameWebSocket = () => {
     readyState,
     getWebSocket
   } = useWebSocket(socketUrl, {
+    share: true,  // Share the WebSocket connection across all hook instances
     shouldReconnect: (closeEvent) => {
       // Reconnect unless it was a manual close or auth failure
       console.log('WebSocket closed:', closeEvent.code, closeEvent.reason)
@@ -380,24 +483,36 @@ export const useGameWebSocket = () => {
   // Send a message to the WebSocket
   const sendWebSocketMessage = useCallback((message: WebSocketMessage) => {
     if (readyState === ReadyState.OPEN) {
-      sendMessage(JSON.stringify(message))
+      try {
+        const messageStr = JSON.stringify(message)
+        sendMessage(messageStr)
+        console.log('Sent WebSocket message:', message.type)
+      } catch (error) {
+        console.error('Failed to send WebSocket message:', error, message)
+      }
     } else {
-      console.warn('WebSocket not connected, cannot send message:', message)
+      console.warn('WebSocket not connected, cannot send message:', message.type)
     }
   }, [sendMessage, readyState])
 
   const handleMessage = useCallback((message: WebSocketMessage) => {
-    console.log('Received WebSocket message:', message)
+    console.log('Received WebSocket message:', message.type)
     
-    // Update sequence number if present
+    // Update sequence number if present and send ack immediately
     if (message.seq_num !== undefined) {
       setCurrentSeq(message.seq_num)
       
-      // Send acknowledgment for sequenced messages
-      sendWebSocketMessage({
-        type: 'ack_seq',
-        seq_num: message.seq_num
-      })
+      // Send acknowledgment for sequenced messages - do this first to avoid blocking
+      if (readyState === ReadyState.OPEN) {
+        try {
+          sendMessage(JSON.stringify({
+            type: 'ack_seq',
+            seq_num: message.seq_num
+          }))
+        } catch (error) {
+          console.error('Failed to send ack:', error)
+        }
+      }
     }
     
     switch (message.type) {
@@ -431,21 +546,40 @@ export const useGameWebSocket = () => {
           isTemporarilyViewed: card.isTemporarilyViewed || false
         })
         
-        // Apply game state
-        setCurrentPlayer(playingState.game.current_player_id)
-        setGamePhase(playingState.game.phase as GamePhase)
+        // Reset game state first to clear any stale data
+        const { resetGameState, setDiscardPile } = useGamePlayStore.getState()
+        resetGameState()
         
+        // Apply game state atomically
         const gamePlayers = playingState.game.players.map(p => ({
           id: p.id,
           nickname: p.nickname,
           cards: p.cards.map(convertCard),
           hasCalledCabo: p.has_called_cabo
         }))
-        setGamePlayers(gamePlayers)
         
-        // Set discard pile and played card if they exist
+        // Update all game state at once to avoid partial updates
+        setGamePlayers(gamePlayers)
+        setCurrentPlayer(playingState.game.current_player_id)
+        setGamePhase(playingState.game.phase as GamePhase)
+        
+        // Set discard pile with only the top card if it exists
         if (playingState.game.top_discard_card) {
-          addCardToDiscard(convertCard(playingState.game.top_discard_card))
+          setDiscardPile([convertCard(playingState.game.top_discard_card)])
+        }
+        
+        // Set drawn card if it exists and current player matches
+        const currentUserId = useAuthStore.getState().sessionId
+        if (playingState.game.drawn_card && playingState.game.current_player_id === currentUserId) {
+          // Handle both object and string formats for drawn card
+          if (typeof playingState.game.drawn_card === 'string') {
+            const parsedCard = parseCardString(playingState.game.drawn_card)
+            setDrawnCard({ ...parsedCard, id: `drawn_${playingState.game.current_player_id}` })
+          } else {
+            setDrawnCard({ ...convertCard(playingState.game.drawn_card), id: `drawn_${playingState.game.current_player_id}` })
+          }
+        } else {
+          setDrawnCard(null)
         }
         
         // Set special action if active
@@ -474,7 +608,11 @@ export const useGameWebSocket = () => {
         const gameEvent = message as GameEventMessage
         console.log('Received game event:', gameEvent.event_type, gameEvent.data)
         
-        handleGameEvent(gameEvent)
+        try {
+          handleGameEvent(gameEvent)
+        } catch (error) {
+          console.error('Error handling game event:', error, gameEvent)
+        }
         break
       }
       
@@ -509,8 +647,8 @@ export const useGameWebSocket = () => {
         const sessionMessage = message as SessionInfoMessage
         console.log('Received session info:', sessionMessage.session_id, sessionMessage.nickname)
         // Update auth store with session info
-        const { setSessionInfo } = useAuthStore.getState()
-        setSessionInfo(sessionMessage.nickname, sessionMessage.session_id)
+        useAuthStore.getState().setSessionInfo(sessionMessage.nickname, sessionMessage.session_id)
+        console.log('Updated auth store with session info')
         break
       }
       
@@ -518,6 +656,12 @@ export const useGameWebSocket = () => {
       
       case 'error': {
         console.error('WebSocket error:', message.message)
+        break
+      }
+      
+      case 'ping': {
+        // Respond to server ping with pong
+        sendWebSocketMessage({ type: 'pong' })
         break
       }
       
@@ -533,14 +677,22 @@ export const useGameWebSocket = () => {
 
   // Get session info
   const requestSessionInfo = useCallback(() => {
+    console.log('Requesting session info...')
     sendWebSocketMessage({ type: 'get_session_info' })
   }, [sendWebSocketMessage])
 
-  // Request session info when connected
+  // Request session info when connected - but only once per connection
   useEffect(() => {
-    if (readyState === ReadyState.OPEN) {
+    let hasRequestedSession = false
+    
+    if (readyState === ReadyState.OPEN && !hasRequestedSession) {
       console.log('WebSocket connected, requesting session info...')
+      hasRequestedSession = true
       requestSessionInfo()
+    }
+    
+    return () => {
+      hasRequestedSession = false
     }
   }, [readyState, requestSessionInfo])
 
