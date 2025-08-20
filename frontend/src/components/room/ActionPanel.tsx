@@ -403,7 +403,7 @@ function KingSkipSwapButton() {
 function getPhaseDescription(phase: GamePhase): string {
   switch (phase) {
     case GamePhase.SETUP:
-      return 'Game is being set up. Look at your first two cards.'
+      return 'Game is being set up. Look at your first two cards - they will be hidden once the game starts!'
     case GamePhase.PLAYING:
       return 'Draw a card from the deck or discard pile, then play or replace a card.'
     case GamePhase.WAITING_FOR_SPECIAL_ACTION:

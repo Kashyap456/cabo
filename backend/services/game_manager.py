@@ -440,12 +440,18 @@ class CaboGame:
                 message = self.message_queue.get_nowait()
                 result = self._handle_message(message)
                 if result.get("success", False):
-                    # Add any generated events
+                    # Add any generated events (support both single event and multiple events)
                     if "event" in result:
                         event = result["event"]
                         events.append(event)
                         # Actually broadcast the event
                         self._broadcast_event(event.event_type, event.data)
+                    # Support multiple events from a single handler
+                    if "events" in result:
+                        for event in result["events"]:
+                            events.append(event)
+                            # Actually broadcast the event
+                            self._broadcast_event(event.event_type, event.data)
                     # Add any follow-up messages
                     if "next_messages" in result:
                         for next_msg in result["next_messages"]:
@@ -524,7 +530,16 @@ class CaboGame:
         self.discard_pile.append(card)
 
         # Handle special effects
+        events = []
         next_messages = []
+        
+        # Always send the card_played event first
+        events.append(GameEvent("card_played", {
+            "player_id": message.player_id,
+            "card": str(card),
+            "special_effect": card.is_special
+        }))
+        
         if card.is_special:
             self.state.special_action_player = message.player_id
             self.state.special_action_timer_id = self._schedule_timeout(
@@ -533,32 +548,33 @@ class CaboGame:
             if card.rank == Rank.KING:
                 # King effect: two-stage process
                 self.state.phase = GamePhase.KING_VIEW_PHASE
+                events.append(GameEvent("game_phase_changed", {
+                    "phase": "king_view_phase",
+                    "current_player": self.get_current_player().player_id
+                }))
             else:
                 self.state.phase = GamePhase.WAITING_FOR_SPECIAL_ACTION
                 self.state.special_action_type = self._get_special_action_type(
                     card)
+                events.append(GameEvent("game_phase_changed", {
+                    "phase": "waiting_for_special_action",
+                    "current_player": self.get_current_player().player_id,
+                    "special_action_type": self.state.special_action_type
+                }))
         else:
             # Start turn transition timer instead of immediate next turn
             self.state.phase = GamePhase.TURN_TRANSITION
             self.state.turn_transition_timer_id = self._schedule_timeout(
                 TurnTransitionTimeoutMessage(), 5.0)
             
-            # Broadcast phase change so clients know we're in transition
-            return {
-                "success": True,
-                "event": GameEvent("game_phase_changed", {
-                    "phase": "turn_transition",
-                    "current_player": self.get_current_player().player_id
-                })
-            }
+            events.append(GameEvent("game_phase_changed", {
+                "phase": "turn_transition",
+                "current_player": self.get_current_player().player_id
+            }))
 
         return {
             "success": True,
-            "event": GameEvent("card_played", {
-                "player_id": message.player_id,
-                "card": str(card),
-                "special_effect": card.is_special
-            }),
+            "events": events,
             "next_messages": next_messages
         }
 
@@ -582,7 +598,17 @@ class CaboGame:
         self.discard_pile.append(old_card)
 
         # Handle special effects
+        events = []
         next_messages = []
+        
+        # Always send the card_replaced_and_played event first
+        events.append(GameEvent("card_replaced_and_played", {
+            "player_id": message.player_id,
+            "played_card": str(old_card),
+            "hand_index": message.hand_index,
+            "special_effect": old_card.is_special
+        }))
+        
         if old_card.is_special:
             self.state.special_action_player = message.player_id
             self.state.special_action_timer_id = self._schedule_timeout(
@@ -591,33 +617,33 @@ class CaboGame:
             if old_card.rank == Rank.KING:
                 # King effect: two-stage process
                 self.state.phase = GamePhase.KING_VIEW_PHASE
+                events.append(GameEvent("game_phase_changed", {
+                    "phase": "king_view_phase",
+                    "current_player": self.get_current_player().player_id
+                }))
             else:
                 self.state.phase = GamePhase.WAITING_FOR_SPECIAL_ACTION
                 self.state.special_action_type = self._get_special_action_type(
                     old_card)
+                events.append(GameEvent("game_phase_changed", {
+                    "phase": "waiting_for_special_action",
+                    "current_player": self.get_current_player().player_id,
+                    "special_action_type": self.state.special_action_type
+                }))
         else:
             # Start turn transition timer instead of immediate next turn
             self.state.phase = GamePhase.TURN_TRANSITION
             self.state.turn_transition_timer_id = self._schedule_timeout(
                 TurnTransitionTimeoutMessage(), 5.0)
             
-            # Broadcast phase change so clients know we're in transition
-            return {
-                "success": True,
-                "event": GameEvent("game_phase_changed", {
-                    "phase": "turn_transition",
-                    "current_player": self.get_current_player().player_id
-                })
-            }
+            events.append(GameEvent("game_phase_changed", {
+                "phase": "turn_transition",
+                "current_player": self.get_current_player().player_id
+            }))
 
         return {
             "success": True,
-            "event": GameEvent("card_replaced_and_played", {
-                "player_id": message.player_id,
-                "played_card": str(old_card),
-                "hand_index": message.hand_index,
-                "special_effect": old_card.is_special
-            }),
+            "events": events,
             "next_messages": next_messages
         }
 

@@ -175,7 +175,24 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'game_phase_changed': {
       console.log('Game phase changed to:', gameEvent.data.phase)
-      setPhase(gameEvent.data.phase as GamePhase)
+      const newPhase = gameEvent.data.phase as GamePhase
+      setPhase(newPhase)
+      
+      // When transitioning from SETUP to PLAYING, hide all temporarily viewed cards
+      if (newPhase === 'playing') {
+        const currentUserId = useAuthStore.getState().sessionId
+        const players = useGamePlayStore.getState().players
+        
+        // Clear isTemporarilyViewed flag from all cards
+        players.forEach(player => {
+          const updatedCards = player.cards.map(card => ({
+            ...card,
+            isTemporarilyViewed: false
+          }))
+          updatePlayerCards(player.id, updatedCards)
+        })
+      }
+      
       if (gameEvent.data.current_player) {
         setCurrentPlayer(gameEvent.data.current_player)
       }
