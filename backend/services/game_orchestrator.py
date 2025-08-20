@@ -138,8 +138,19 @@ class GameOrchestrator:
             })
             return
 
-        # Convert to appropriate GameMessage type
+        # Handle non-game messages first
         msg_type = message.get("type")
+
+        # Handle ack_seq messages (sequence acknowledgments)
+        if msg_type == "ack_seq":
+            seq_num = message.get("seq_num")
+            if seq_num is not None:
+                await self.connection_manager.acknowledge_sequence(
+                    room_id, session_id, seq_num
+                )
+            return
+
+        # Convert to appropriate GameMessage type
         game_message = None
 
         try:
