@@ -143,7 +143,6 @@ class MessageSequencer:
 
     def get_player_checkpoint(self, room_id: str, session_id: str) -> Optional[RoomCheckpoint]:
         """Get the latest personalized checkpoint for a player"""
-        print(f"Player checkpoints: {self.player_checkpoints[room_id]}")
         return self.player_checkpoints.get(room_id, {}).get(session_id)
 
     def get_messages_since(self, room_id: str, since_seq: int) -> List[SequencedMessage]:

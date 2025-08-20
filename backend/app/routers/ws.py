@@ -185,7 +185,6 @@ async def websocket_endpoint(
             return
 
         session_id = str(session.user_id)
-        print(f"Session ID, Token: {session_id}, {session_token}")
 
         # Accept connection
         await websocket.accept()
@@ -200,17 +199,13 @@ async def websocket_endpoint(
             room = await room_manager.get_room_by_id(db, str(membership.room_id))
             if room:
                 is_host = str(room.host_session_id) == session_id
-                print(f"Is host: {is_host}")
                 # Add to room connections
                 await connection_manager.add_to_room(session_id, str(room.room_id), websocket, session.nickname, is_host)
 
-                print(f"Room phase: {room.phase}")
                 # Create/update room checkpoint for waiting state
                 if room.phase == RoomPhase.WAITING:
                     await create_room_waiting_checkpoint(room, db)
                 elif room.phase == RoomPhase.IN_GAME:
-                    print(
-                        f"Creating player checkpoint for room {room.room_id} for session {session_id}")
                     await game_orchestrator._create_player_checkpoint(str(room.room_id), session_id)
 
                 # Synchronize client with current state

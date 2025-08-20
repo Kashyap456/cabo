@@ -4,7 +4,7 @@ import axios from "axios"
 import Cookies from "js-cookie"
 
 const useCreateSession = () => {
-  const { setNickname } = useAuthStore()
+  const { setSessionInfo } = useAuthStore()
   return useMutation({
     mutationFn: async (nickname: string) => {
       const response = await axios.post(`/sessions`, { nickname })
@@ -13,7 +13,7 @@ const useCreateSession = () => {
     onSuccess: (data) => {
       Cookies.set('session_token', data.user_id)
       Cookies.set('nickname', data.nickname)
-      setNickname(data.nickname)
+      setSessionInfo(data.nickname, data.user_id)
     },
   })
 }

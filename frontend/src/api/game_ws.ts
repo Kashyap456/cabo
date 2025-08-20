@@ -92,11 +92,185 @@ export interface ReadyMessage extends WebSocketMessage {
   current_seq: number
 }
 
-export interface GameMessage extends WebSocketMessage {
-  type: 'game_message'
+export interface GameEventMessage extends WebSocketMessage {
+  type: 'game_event'
   seq_num: number
-  from: string
+  event_type: string
   data: any
+}
+
+const handleGameEvent = (gameEvent: GameEventMessage) => {
+  const {
+    setCurrentPlayer,
+    setPhase,
+    addCardToDiscard,
+    setSpecialAction,
+    addStackCall,
+    clearStackCalls,
+    setCalledCabo,
+    getPlayerById
+  } = useGamePlayStore.getState()
+
+  const convertCard = (card: any): GameCard => ({
+    id: card.id || '',
+    rank: card.rank,
+    suit: card.suit,
+    isTemporarilyViewed: card.isTemporarilyViewed || false
+  })
+
+  switch (gameEvent.event_type) {
+    case 'game_started': {
+      console.log('Game started with setup phase')
+      setPhase(GamePhase.SETUP)
+      break
+    }
+
+    case 'game_phase_changed': {
+      console.log('Game phase changed to:', gameEvent.data.phase)
+      setPhase(gameEvent.data.phase as GamePhase)
+      if (gameEvent.data.current_player) {
+        setCurrentPlayer(gameEvent.data.current_player)
+      }
+      break
+    }
+
+    case 'turn_changed': {
+      console.log('Turn changed to player:', gameEvent.data.current_player_name)
+      setCurrentPlayer(gameEvent.data.current_player)
+      break
+    }
+
+    case 'card_drawn': {
+      console.log('Card drawn by player:', gameEvent.data.player_id)
+      // Card draw is handled by game state updates, but we can show notifications
+      break
+    }
+
+    case 'card_played': {
+      console.log('Card played:', gameEvent.data.card)
+      if (gameEvent.data.card && gameEvent.data.card !== 'hidden') {
+        // Parse card string and add to discard pile
+        // This would need proper card parsing from backend format
+        const cardData = gameEvent.data.card
+        if (typeof cardData === 'object') {
+          addCardToDiscard(convertCard(cardData))
+        }
+      }
+      break
+    }
+
+    case 'card_replaced_and_play': {
+      console.log('Card replaced and played by:', gameEvent.data.player_id)
+      if (gameEvent.data.played_card && typeof gameEvent.data.played_card === 'object') {
+        addCardToDiscard(convertCard(gameEvent.data.played_card))
+      }
+      break
+    }
+
+    case 'stack_called': {
+      console.log('Stack called by:', gameEvent.data.caller)
+      const caller = getPlayerById(gameEvent.data.caller_id)
+      if (caller) {
+        addStackCall({
+          playerId: gameEvent.data.caller_id,
+          nickname: gameEvent.data.caller,
+          timestamp: (typeof gameEvent.timestamp === 'number' ? gameEvent.timestamp * 1000 : Date.now())
+        })
+      }
+      setPhase(GamePhase.STACK_CALLED)
+      break
+    }
+
+    case 'stack_success': {
+      console.log('Stack successful:', gameEvent.data.type, 'by', gameEvent.data.player)
+      // Clear stack calls and continue game
+      clearStackCalls()
+      break
+    }
+
+    case 'stack_failed': {
+      console.log('Stack failed by:', gameEvent.data.player)
+      // Clear stack calls and continue game
+      clearStackCalls()
+      break
+    }
+
+    case 'stack_timeout': {
+      console.log('Stack timed out for:', gameEvent.data.player)
+      clearStackCalls()
+      break
+    }
+
+    case 'cabo_called': {
+      console.log('Cabo called by:', gameEvent.data.player)
+      setCalledCabo(gameEvent.data.player_id)
+      break
+    }
+
+    case 'card_viewed': {
+      console.log('Card viewed by:', gameEvent.data.player)
+      // Card viewing is handled by temporary visibility in game state
+      break
+    }
+
+    case 'opponent_card_viewed': {
+      console.log('Opponent card viewed by:', gameEvent.data.viewer, 'target:', gameEvent.data.target)
+      // Handle opponent card viewing
+      break
+    }
+
+    case 'cards_swapped': {
+      console.log('Cards swapped between:', gameEvent.data.player, 'and', gameEvent.data.target)
+      // Card swapping is handled by game state updates
+      break
+    }
+
+    case 'king_card_viewed': {
+      console.log('King card viewed by:', gameEvent.data.viewer, 'target:', gameEvent.data.target)
+      setSpecialAction({
+        type: 'KING_VIEW',
+        playerId: gameEvent.data.viewer_id || '',
+        targetPlayerId: gameEvent.data.target_id,
+        isComplete: true
+      })
+      break
+    }
+
+    case 'king_cards_swapped': {
+      console.log('King cards swapped between:', gameEvent.data.player, 'and', gameEvent.data.target)
+      setSpecialAction({
+        type: 'KING_SWAP',
+        playerId: gameEvent.data.player_id || '',
+        targetPlayerId: gameEvent.data.target_id,
+        isComplete: true
+      })
+      break
+    }
+
+    case 'king_swap_skipped': {
+      console.log('King swap skipped by:', gameEvent.data.player)
+      setSpecialAction(null)
+      break
+    }
+
+    case 'special_action_timeout': {
+      console.log('Special action timed out')
+      setSpecialAction(null)
+      break
+    }
+
+    case 'game_ended': {
+      console.log('Game ended, winner:', gameEvent.data.winner_name)
+      setPhase(GamePhase.ENDED)
+      // Could show winner announcement
+      break
+    }
+
+    default: {
+      console.warn('Unknown game event type:', gameEvent.event_type)
+      break
+    }
+  }
 }
 
 export const useGameWebSocket = () => {
@@ -243,6 +417,14 @@ export const useGameWebSocket = () => {
           })
         }
         
+        break
+      }
+      
+      case 'game_event': {
+        const gameEvent = message as GameEventMessage
+        console.log('Received game event:', gameEvent.event_type, gameEvent.data)
+        
+        handleGameEvent(gameEvent)
         break
       }
       
