@@ -45,6 +45,13 @@ export default function PlayingView() {
     }
   }
 
+  // Handle clicking the deck to draw a card
+  const handleDeckClick = () => {
+    if (isMyTurn && phase === GamePhase.PLAYING && !drawnCard) {
+      sendMessage({ type: 'draw_card' })
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Game Status */}
@@ -115,19 +122,38 @@ export default function PlayingView() {
         </div>
       )}
 
-      {/* Discard Pile */}
+      {/* Deck and Discard Pile */}
       <div className="bg-white rounded-lg shadow-md p-4">
-        <h3 className="text-lg font-semibold mb-3">Discard Pile</h3>
-        <div className="flex justify-center">
-          {topDiscardCard ? (
-            <div className="w-16 h-24 bg-white border-2 border-gray-300 rounded-lg flex items-center justify-center font-semibold">
-              {getCardDisplayValue(topDiscardCard)}
+        <h3 className="text-lg font-semibold mb-3">Deck & Discard Pile</h3>
+        <div className="flex justify-center gap-8">
+          {/* Deck */}
+          <div className="text-center">
+            <div
+              onClick={handleDeckClick}
+              className={`w-16 h-24 bg-blue-600 border-2 border-blue-700 rounded-lg flex items-center justify-center font-bold text-white text-xs shadow-lg ${
+                isMyTurn && phase === GamePhase.PLAYING && !drawnCard
+                  ? 'cursor-pointer hover:bg-blue-700 hover:border-blue-800 transition-all duration-200 transform hover:scale-105'
+                  : 'opacity-50'
+              }`}
+            >
+              DECK
             </div>
-          ) : (
-            <div className="w-16 h-24 bg-gray-100 border-2 border-gray-300 rounded-lg flex items-center justify-center text-gray-500">
-              Empty
-            </div>
-          )}
+            <p className="text-xs text-gray-600 mt-1">Click to draw</p>
+          </div>
+
+          {/* Discard Pile */}
+          <div className="text-center">
+            {topDiscardCard ? (
+              <div className="w-16 h-24 bg-white border-2 border-gray-300 rounded-lg flex items-center justify-center font-semibold shadow-lg">
+                {getCardDisplayValue(topDiscardCard)}
+              </div>
+            ) : (
+              <div className="w-16 h-24 bg-gray-100 border-2 border-gray-300 rounded-lg flex items-center justify-center text-gray-500">
+                Empty
+              </div>
+            )}
+            <p className="text-xs text-gray-600 mt-1">Discard pile</p>
+          </div>
         </div>
       </div>
 
