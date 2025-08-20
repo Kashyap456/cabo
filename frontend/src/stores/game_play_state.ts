@@ -79,6 +79,9 @@ export interface GamePlayState {
   discardPile: Card[]
   topDiscardCard: Card | null
   
+  // Drawn card (visible only to the player who drew it)
+  drawnCard: Card | null
+  
   // Special states
   specialAction: SpecialAction | null
   
@@ -96,6 +99,7 @@ export interface GamePlayState {
   setPlayers: (players: PlayerGameState[]) => void
   updatePlayerCards: (playerId: string, cards: Card[]) => void
   addCardToDiscard: (card: Card) => void
+  setDrawnCard: (card: Card | null) => void
   setSpecialAction: (action: SpecialAction | null) => void
   addStackCall: (stackCall: StackCall) => void
   setPendingStackCall: (stackCall: StackCall | null) => void
@@ -117,6 +121,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   players: [],
   discardPile: [],
   topDiscardCard: null,
+  drawnCard: null,
   specialAction: null,
   stackCalls: [],
   pendingStackCall: null,
@@ -138,6 +143,8 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     discardPile: [...state.discardPile, card],
     topDiscardCard: card
   })),
+  
+  setDrawnCard: (card) => set({ drawnCard: card }),
   
   setSpecialAction: (action) => set({ specialAction: action }),
   

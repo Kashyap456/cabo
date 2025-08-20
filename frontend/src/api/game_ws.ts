@@ -1,8 +1,9 @@
 import useWebSocket, { ReadyState } from 'react-use-websocket'
 import { useCallback, useEffect } from 'react'
-import Cookies from 'js-cookie'
+
 import { useRoomStore, type Player, RoomPhase } from '@/stores/game_state'
-import { useGamePlayStore, GamePhase, type Card as GameCard } from '@/stores/game_play_state'
+import { useGamePlayStore, GamePhase, Suit, type Card as GameCard } from '@/stores/game_play_state'
+import { useAuthStore } from '@/stores/auth'
 
 export interface WebSocketMessage {
   type: string
@@ -92,6 +93,13 @@ export interface ReadyMessage extends WebSocketMessage {
   current_seq: number
 }
 
+export interface SessionInfoMessage extends WebSocketMessage {
+  type: 'session_info'
+  session_id: string
+  nickname: string
+  room_id: string | null
+}
+
 export interface GameEventMessage extends WebSocketMessage {
   type: 'game_event'
   seq_num: number
@@ -104,6 +112,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     setCurrentPlayer,
     setPhase,
     addCardToDiscard,
+    setDrawnCard,
     setSpecialAction,
     addStackCall,
     clearStackCalls,
@@ -137,12 +146,50 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     case 'turn_changed': {
       console.log('Turn changed to player:', gameEvent.data.current_player_name)
       setCurrentPlayer(gameEvent.data.current_player)
+      // Clear drawn card when turn changes (in case it wasn't used)
+      setDrawnCard(null)
       break
     }
 
     case 'card_drawn': {
       console.log('Card drawn by player:', gameEvent.data.player_id)
-      // Card draw is handled by game state updates, but we can show notifications
+      // If the card is visible (not "hidden"), store it in drawn card state
+      if (gameEvent.data.card && gameEvent.data.card !== 'hidden') {
+        // Parse card from backend string format (e.g., "3♥" or card object)
+        if (typeof gameEvent.data.card === 'string') {
+          // Parse string format like "3♥", "K♠", "Joker"
+          const cardStr = gameEvent.data.card
+          if (cardStr === 'Joker') {
+            setDrawnCard({
+              id: 'drawn_card',
+              rank: 0, // Joker
+              suit: null,
+              isTemporarilyViewed: false
+            })
+          } else {
+            // Extract rank and suit from string
+            const suitSymbols = { '♥': Suit.HEARTS, '♦': Suit.DIAMONDS, '♣': Suit.CLUBS, '♠': Suit.SPADES }
+            const lastChar = cardStr.slice(-1)
+            const suit = suitSymbols[lastChar as keyof typeof suitSymbols] || Suit.HEARTS
+            const rankStr = cardStr.slice(0, -1)
+            let rank = parseInt(rankStr)
+            if (isNaN(rank)) {
+              // Handle face cards
+              const faceCards = { 'A': 1, 'J': 11, 'Q': 12, 'K': 13 }
+              rank = faceCards[rankStr as keyof typeof faceCards] || 1
+            }
+            setDrawnCard({
+              id: 'drawn_card',
+              rank,
+              suit,
+              isTemporarilyViewed: false
+            })
+          }
+        } else if (typeof gameEvent.data.card === 'object') {
+          // Card is already in object format
+          setDrawnCard(convertCard(gameEvent.data.card))
+        }
+      }
       break
     }
 
@@ -156,6 +203,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
           addCardToDiscard(convertCard(cardData))
         }
       }
+      // Clear drawn card since it was played
+      setDrawnCard(null)
       break
     }
 
@@ -164,6 +213,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       if (gameEvent.data.played_card && typeof gameEvent.data.played_card === 'object') {
         addCardToDiscard(convertCard(gameEvent.data.played_card))
       }
+      // Clear drawn card since it was used in replace and play
+      setDrawnCard(null)
       break
     }
 
@@ -279,9 +330,7 @@ export const useGameWebSocket = () => {
     removePlayer, 
     setPlayers, 
     setPhase,
-    currentSeq,
     setCurrentSeq,
-    isReady,
     setIsReady
   } = useRoomStore()
   
@@ -291,8 +340,7 @@ export const useGameWebSocket = () => {
     setPlayers: setGamePlayers,
     addCardToDiscard,
     setSpecialAction,
-    addStackCall,
-    setCalledCabo
+    addStackCall
   } = useGamePlayStore()
   
   const socketUrl = 'ws://localhost:8000/ws'
@@ -326,6 +374,8 @@ export const useGameWebSocket = () => {
       }
     }
   }, [lastMessage])
+
+
 
   // Send a message to the WebSocket
   const sendWebSocketMessage = useCallback((message: WebSocketMessage) => {
@@ -455,11 +505,16 @@ export const useGameWebSocket = () => {
         break
       }
       
-      case 'game_message': {
-        const gameMessage = message as GameMessage
-        console.log('Game message from', gameMessage.from, ':', gameMessage.data)
+      case 'session_info': {
+        const sessionMessage = message as SessionInfoMessage
+        console.log('Received session info:', sessionMessage.session_id, sessionMessage.nickname)
+        // Update auth store with session info
+        const { setSessionInfo } = useAuthStore.getState()
+        setSessionInfo(sessionMessage.nickname, sessionMessage.session_id)
         break
       }
+      
+
       
       case 'error': {
         console.error('WebSocket error:', message.message)
@@ -480,6 +535,14 @@ export const useGameWebSocket = () => {
   const requestSessionInfo = useCallback(() => {
     sendWebSocketMessage({ type: 'get_session_info' })
   }, [sendWebSocketMessage])
+
+  // Request session info when connected
+  useEffect(() => {
+    if (readyState === ReadyState.OPEN) {
+      console.log('WebSocket connected, requesting session info...')
+      requestSessionInfo()
+    }
+  }, [readyState, requestSessionInfo])
 
   // Connection status helpers
   const connectionStatus = {

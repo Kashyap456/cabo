@@ -11,8 +11,22 @@ interface AuthStore {
 
 export const useAuthStore = create<AuthStore>((set) => ({
   nickname: Cookies.get('nickname') || '',
-  sessionId: Cookies.get('session_token') || null,
-  setNickname: (nickname) => set({ nickname }),
-  setSessionId: (sessionId) => set({ sessionId }),
-  setSessionInfo: (nickname, sessionId) => set({ nickname, sessionId }),
+  sessionId: Cookies.get('session_id') || null,
+  setNickname: (nickname) => {
+    Cookies.set('nickname', nickname)
+    set({ nickname })
+  },
+  setSessionId: (sessionId) => {
+    if (sessionId) {
+      Cookies.set('session_id', sessionId)
+    } else {
+      Cookies.remove('session_id')
+    }
+    set({ sessionId })
+  },
+  setSessionInfo: (nickname, sessionId) => {
+    Cookies.set('nickname', nickname)
+    Cookies.set('session_id', sessionId)
+    set({ nickname, sessionId })
+  },
 }))

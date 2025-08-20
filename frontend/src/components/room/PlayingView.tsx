@@ -12,6 +12,7 @@ export default function PlayingView() {
     phase,
     players,
     topDiscardCard,
+    drawnCard,
     specialAction,
     stackCalls,
     getCurrentPlayer,
@@ -72,6 +73,22 @@ export default function PlayingView() {
               {call.nickname} called STACK!
             </p>
           ))}
+        </div>
+      )}
+
+      {/* Drawn Card - only show to current player when they have drawn a card */}
+      {drawnCard && isMyTurn && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <h3 className="font-semibold text-green-800 mb-2">Drawn Card</h3>
+          <div className="flex justify-center">
+            <div className="w-16 h-24 border-2 border-green-400 rounded-lg bg-white flex items-center justify-center text-sm font-medium shadow-lg">
+              {getCardDisplayValue(drawnCard)}
+            </div>
+          </div>
+          <p className="text-center text-sm text-green-700 mt-2">
+            You drew this card. Choose to play it or replace a card in your
+            hand.
+          </p>
         </div>
       )}
 

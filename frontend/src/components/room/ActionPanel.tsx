@@ -10,7 +10,14 @@ export default function ActionPanel() {
   const currentPlayer = players.find((p) => p.id === sessionId)
   const isMyTurn = currentPlayer && currentPlayer.id === currentPlayerId
 
-  if (!currentPlayer) return null
+  if (!currentPlayer) {
+    return (
+      <div className="bg-white rounded-lg shadow-md p-4">
+        <h3 className="text-lg font-semibold mb-4">Actions</h3>
+        <div className="text-center text-gray-500">Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="bg-white rounded-lg shadow-md p-4">
