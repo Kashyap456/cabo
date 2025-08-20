@@ -2,8 +2,10 @@ import {
   useGamePlayStore,
   getCardDisplayValue,
   isCardKnown,
+  GamePhase,
 } from '../../stores/game_play_state'
 import { useAuthStore } from '../../stores/auth'
+import { useGameWebSocket } from '../../api/game_ws'
 import ActionPanel from './ActionPanel'
 
 export default function PlayingView() {
@@ -20,10 +22,28 @@ export default function PlayingView() {
   } = useGamePlayStore()
 
   const { sessionId } = useAuthStore()
+  const { sendMessage } = useGameWebSocket()
   const currentPlayer = players.find((p) => p.id === sessionId)
   const activePlayer = getCurrentPlayer()
 
   const isMyTurn = currentPlayer && currentPlayer.id === currentPlayerId
+
+  // Handle clicking the drawn card to play it
+  const handleDrawnCardClick = () => {
+    if (drawnCard && isMyTurn && phase === GamePhase.PLAYING) {
+      sendMessage({ type: 'play_drawn_card' })
+    }
+  }
+
+  // Handle clicking a hand card to replace and play it
+  const handleHandCardClick = (cardIndex: number) => {
+    if (drawnCard && isMyTurn && phase === GamePhase.PLAYING) {
+      sendMessage({
+        type: 'replace_and_play',
+        hand_index: cardIndex,
+      })
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -81,13 +101,16 @@ export default function PlayingView() {
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
           <h3 className="font-semibold text-green-800 mb-2">Drawn Card</h3>
           <div className="flex justify-center">
-            <div className="w-16 h-24 border-2 border-green-400 rounded-lg bg-white flex items-center justify-center text-sm font-medium shadow-lg">
+            <div
+              onClick={handleDrawnCardClick}
+              className="w-16 h-24 border-2 border-green-400 rounded-lg bg-white flex items-center justify-center text-sm font-medium shadow-lg cursor-pointer hover:bg-green-50 hover:border-green-500 transition-all duration-200 transform hover:scale-105"
+            >
               {getCardDisplayValue(drawnCard)}
             </div>
           </div>
           <p className="text-center text-sm text-green-700 mt-2">
-            You drew this card. Choose to play it or replace a card in your
-            hand.
+            Click the card to play it, or click one of your cards below to
+            replace and play.
           </p>
         </div>
       )}
@@ -118,18 +141,29 @@ export default function PlayingView() {
             }`}
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <h4 className="font-semibold">{player.nickname}</h4>
-                {player.id === sessionId && (
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                    You
-                  </span>
-                )}
-                {player.hasCalledCabo && (
-                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-                    Cabo!
-                  </span>
-                )}
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-semibold">{player.nickname}</h4>
+                  {player.id === sessionId && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                      You
+                    </span>
+                  )}
+                  {player.hasCalledCabo && (
+                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                      Cabo!
+                    </span>
+                  )}
+                </div>
+                {/* Show hint when player can click cards */}
+                {player.id === sessionId &&
+                  drawnCard &&
+                  isMyTurn &&
+                  phase === GamePhase.PLAYING && (
+                    <div className="text-xs text-blue-600 mt-1">
+                      💡 Click a card to replace and play it
+                    </div>
+                  )}
               </div>
               <span className="text-sm text-gray-600">
                 {player.cards.length} cards
@@ -138,20 +172,36 @@ export default function PlayingView() {
 
             {/* Player's Cards */}
             <div className="flex flex-wrap gap-2">
-              {player.cards.map((card) => (
-                <div
-                  key={card.id}
-                  className={`w-12 h-16 border-2 rounded flex items-center justify-center text-xs font-medium ${
-                    isCardKnown(card)
-                      ? card.isTemporarilyViewed
-                        ? 'bg-green-50 border-green-300 text-green-800'
-                        : 'bg-white border-gray-300'
-                      : 'bg-gray-100 border-gray-300 text-gray-500'
-                  }`}
-                >
-                  {getCardDisplayValue(card)}
-                </div>
-              ))}
+              {player.cards.map((card, cardIndex) => {
+                const isCurrentPlayer = player.id === sessionId
+                const canReplaceCard =
+                  isCurrentPlayer &&
+                  drawnCard &&
+                  isMyTurn &&
+                  phase === GamePhase.PLAYING
+
+                return (
+                  <div
+                    key={card.id}
+                    onClick={() =>
+                      canReplaceCard && handleHandCardClick(cardIndex)
+                    }
+                    className={`w-12 h-16 border-2 rounded flex items-center justify-center text-xs font-medium ${
+                      isCardKnown(card)
+                        ? card.isTemporarilyViewed
+                          ? 'bg-green-50 border-green-300 text-green-800'
+                          : 'bg-white border-gray-300'
+                        : 'bg-gray-100 border-gray-300 text-gray-500'
+                    } ${
+                      canReplaceCard
+                        ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 transform hover:scale-105'
+                        : ''
+                    }`}
+                  >
+                    {getCardDisplayValue(card)}
+                  </div>
+                )
+              })}
             </div>
           </div>
         ))}
