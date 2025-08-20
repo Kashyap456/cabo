@@ -13,6 +13,7 @@ from services.game_manager import (
     GamePhase
 )
 from services.connection_manager import ConnectionManager
+from services.game_persistence import GamePersistence
 from app.models import GameRoom, UserSession
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,9 +44,10 @@ class GameOrchestrator:
         def broadcast_callback(event: GameEvent):
             asyncio.create_task(self._broadcast_game_event(room_id, event))
 
-        # Create checkpoint callback
+        # Create checkpoint callback that also persists to database
         def checkpoint_callback():
             asyncio.create_task(self._create_game_checkpoint(room_id))
+            asyncio.create_task(self._persist_game_state(room_id, db))
 
         # Create game instance
         game = CaboGame(player_ids, player_names,
@@ -233,6 +235,15 @@ class GameOrchestrator:
         if room_id in self.room_codes:
             del self.room_codes[room_id]
 
+        # Deactivate game checkpoint in database
+        try:
+            from app.core.database import async_session_maker
+            async with async_session_maker() as db:
+                await GamePersistence.deactivate_checkpoint(db, room_id)
+        except Exception as e:
+            logger.error(
+                f"Error deactivating checkpoint for room {room_id}: {e}")
+
         # Notify all players
         await self.connection_manager.broadcast_to_room(room_id, {
             "type": "game_cleanup",
@@ -365,3 +376,120 @@ class GameOrchestrator:
     def is_game_active(self, room_id: str) -> bool:
         """Check if a game is active for a room"""
         return room_id in self.active_games
+
+    async def _persist_game_state(self, room_id: str, db: AsyncSession):
+        """Persist current game state to database"""
+        try:
+            game = self.active_games.get(room_id)
+            room_code = self.room_codes.get(room_id)
+
+            if not game or not room_code:
+                logger.warning(
+                    f"Cannot persist game state - game or room_code not found for room {room_id}")
+                return
+
+            # Get current sequence number from connection manager
+            current_seq = self.connection_manager.sequencer.room_sequences.get(
+                room_id, 0)
+
+            await GamePersistence.save_game_checkpoint(db, room_id, game, room_code, current_seq)
+            logger.debug(
+                f"Persisted game state for room {room_id} at sequence {current_seq}")
+
+        except Exception as e:
+            logger.error(
+                f"Error persisting game state for room {room_id}: {e}")
+
+    async def restore_game_from_checkpoint(self, room_id: str, db: AsyncSession) -> bool:
+        """Restore a game from database checkpoint"""
+        try:
+            checkpoint_data = await GamePersistence.load_game_checkpoint(db, room_id)
+            if not checkpoint_data:
+                return False
+
+            game, room_code, sequence_number = checkpoint_data
+
+            # Create broadcast callback
+            def broadcast_callback(event: GameEvent):
+                asyncio.create_task(self._broadcast_game_event(room_id, event))
+
+            # Create checkpoint callback
+            def checkpoint_callback():
+                asyncio.create_task(self._create_game_checkpoint(room_id))
+                asyncio.create_task(self._persist_game_state(room_id, db))
+
+            # Update game callbacks
+            game.broadcast_callback = broadcast_callback
+            game.checkpoint_callback = checkpoint_callback
+
+            # Store restored game
+            self.active_games[room_id] = game
+            self.room_codes[room_id] = room_code
+
+            # Restore sequence number in connection manager
+            self.connection_manager.sequencer.room_sequences[room_id] = sequence_number
+
+            # Create message queue and start processing loop
+            self.game_queues[room_id] = asyncio.Queue()
+            self.game_tasks[room_id] = asyncio.create_task(
+                self.process_game_loop(room_id)
+            )
+
+            logger.info(
+                f"Restored game for room {room_id} from checkpoint at sequence {sequence_number}")
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Error restoring game from checkpoint for room {room_id}: {e}")
+            return False
+
+    @classmethod
+    async def restore_all_active_games(cls, connection_manager: ConnectionManager) -> 'GameOrchestrator':
+        """Create GameOrchestrator and restore all active games from database"""
+        orchestrator = cls(connection_manager)
+
+        try:
+            from app.core.database import async_session_maker
+            async with async_session_maker() as db:
+                active_games = await GamePersistence.get_all_active_checkpoints(db)
+
+                for room_id, game, room_code, sequence_number in active_games:
+                    # Create broadcast callback
+                    def broadcast_callback(event: GameEvent, rid=room_id):
+                        asyncio.create_task(
+                            orchestrator._broadcast_game_event(rid, event))
+
+                    # Create checkpoint callback
+                    def checkpoint_callback(rid=room_id):
+                        asyncio.create_task(
+                            orchestrator._create_game_checkpoint(rid))
+                        asyncio.create_task(
+                            orchestrator._persist_game_state(rid, db))
+
+                    # Update game callbacks
+                    game.broadcast_callback = broadcast_callback
+                    game.checkpoint_callback = checkpoint_callback
+
+                    # Store restored game
+                    orchestrator.active_games[room_id] = game
+                    orchestrator.room_codes[room_id] = room_code
+
+                    # Restore sequence number
+                    orchestrator.connection_manager.sequencer.room_sequences[room_id] = sequence_number
+
+                    # Create message queue and start processing loop
+                    orchestrator.game_queues[room_id] = asyncio.Queue()
+                    orchestrator.game_tasks[room_id] = asyncio.create_task(
+                        orchestrator.process_game_loop(room_id)
+                    )
+
+                    logger.info(f"Restored game for room {room_id}")
+
+                logger.info(
+                    f"Restored {len(active_games)} active games from database")
+
+        except Exception as e:
+            logger.error(f"Error restoring active games: {e}")
+
+        return orchestrator

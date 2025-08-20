@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import check_database_connection
@@ -5,8 +6,48 @@ from app.routers import session, game, ws
 from app.middleware.session import SessionMiddleware
 from services.connection_manager import ConnectionManager
 from services.game_orchestrator import GameOrchestrator
+import logging
 
-app = FastAPI()
+# Global variables for shared services
+connection_manager = ConnectionManager()
+game_orchestrator = None
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager - handles startup and shutdown"""
+    global game_orchestrator
+
+    # Startup
+    try:
+        # Restore active games from database
+        game_orchestrator = await GameOrchestrator.restore_all_active_games(connection_manager)
+
+        # Set up dependencies in routers
+        game.set_connection_manager(connection_manager)
+        game.set_game_orchestrator(game_orchestrator)
+        ws.set_game_orchestrator(game_orchestrator)
+        ws.set_connection_manager(connection_manager)
+
+        logger.info("Application started successfully with restored games")
+
+    except Exception as e:
+        logger.error(f"Error during startup: {e}")
+        print(f"Error during startup: {e}")
+        # Fall back to empty orchestrator if restoration fails
+        game_orchestrator = GameOrchestrator(connection_manager)
+        game.set_connection_manager(connection_manager)
+        game.set_game_orchestrator(game_orchestrator)
+        ws.set_game_orchestrator(game_orchestrator)
+        ws.set_connection_manager(connection_manager)
+
+    yield
+
+    # Shutdown
+    logger.info("Application shutting down")
+
+app = FastAPI(lifespan=lifespan)
 
 # Add CORS middleware
 app.add_middleware(
@@ -17,15 +58,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
-
-# Initialize shared services
-connection_manager = ConnectionManager()
-game_orchestrator = GameOrchestrator(connection_manager)
-
-# Set up dependencies in routers
-game.set_connection_manager(connection_manager)
-game.set_game_orchestrator(game_orchestrator)
-ws.set_game_orchestrator(game_orchestrator)
 
 # Add middleware
 app.add_middleware(SessionMiddleware, refresh_threshold_days=7, ttl_days=180)
