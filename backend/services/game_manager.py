@@ -300,7 +300,7 @@ class GameState:
 
 
 class CaboGame:
-    def __init__(self, player_ids: List[str], player_names: List[str], broadcast_callback: Optional[Callable[[GameEvent], None]] = None):
+    def __init__(self, player_ids: List[str], player_names: List[str], broadcast_callback: Optional[Callable[[GameEvent], None]] = None, checkpoint_callback: Optional[Callable[[], None]] = None):
         self.game_id = str(uuid.uuid4())
         self.deck = Deck()
         self.discard_pile: List[Card] = []
@@ -308,6 +308,7 @@ class CaboGame:
         self.state = GameState(GamePhase.SETUP, 0)
         self.message_queue: Queue[GameMessage] = Queue()
         self.broadcast_callback = broadcast_callback
+        self.checkpoint_callback = checkpoint_callback
         # timeout_id -> expiry_time
         self.pending_timeouts: Dict[str, float] = {}
 
@@ -352,6 +353,11 @@ class CaboGame:
         if self.broadcast_callback:
             event = GameEvent(event_type, data)
             self.broadcast_callback(event)
+
+    def _trigger_checkpoint(self):
+        """Trigger a checkpoint creation"""
+        if self.checkpoint_callback:
+            self.checkpoint_callback()
 
     def _schedule_timeout(self, message: GameMessage, delay_seconds: float) -> str:
         """Schedule a timeout message to be added to queue after delay"""
@@ -728,6 +734,9 @@ class CaboGame:
         self.state.cabo_caller = message.player_id
         self.state.final_round_started = True
 
+        # Trigger checkpoint for cabo call
+        self._trigger_checkpoint()
+
         return {
             "success": True,
             "event": GameEvent("cabo_called", {
@@ -759,6 +768,9 @@ class CaboGame:
         self.state.drawn_card = None
         self.state.played_card = None
 
+        # Trigger checkpoint for turn change
+        self._trigger_checkpoint()
+
         return {
             "success": True,
             "event": GameEvent("turn_changed", {
@@ -777,6 +789,9 @@ class CaboGame:
         scores.sort(key=lambda x: x[2])  # Sort by score
 
         self.state.winner = scores[0][0]  # Player with lowest score wins
+
+        # Trigger checkpoint for game end
+        self._trigger_checkpoint()
 
         return {
             "success": True,
@@ -1081,6 +1096,9 @@ class CaboGame:
         self.state.current_player_index = random.randint(
             0, len(self.players) - 1)
         self.state.phase = GamePhase.PLAYING
+
+        # Trigger checkpoint for major phase change
+        self._trigger_checkpoint()
 
         return {
             "success": True,

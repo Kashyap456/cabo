@@ -123,7 +123,6 @@ class RoomManager:
             .where(GameRoom.room_code == room_code)
         )
         room = result.scalar_one_or_none()
-        print(str(room.user_memberships))
 
         if not room:
             raise ValueError(f"Room {room_code} not found")
@@ -277,6 +276,8 @@ class RoomManager:
         room.phase = RoomPhase.IN_GAME
         room.game_started_at = datetime.utcnow()
         room.last_activity = datetime.utcnow()
+
+        await db.commit()
 
         return room
 

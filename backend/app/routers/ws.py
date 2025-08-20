@@ -105,7 +105,8 @@ async def create_room_playing_checkpoint_for_player(room: GameRoom, game_state, 
     # Game players should be in same order as database players since they were created from them
     current_player_id = None
     if 0 <= game_state.current_player_index < len(players):
-        current_player_id = str(players[game_state.current_player_index].user_id)
+        current_player_id = str(
+            players[game_state.current_player_index].user_id)
 
     checkpoint_data = {
         "room": {
@@ -154,7 +155,7 @@ async def create_room_playing_checkpoint_for_player(room: GameRoom, game_state, 
 
 
 async def broadcast_room_playing_checkpoint(room: GameRoom, game_state, players, db: AsyncSession):
-    """Create and broadcast personalized checkpoints to all players in the room"""
+    """Create and broadcast personalized sequenced checkpoints to all players in the room"""
     # Get all connected players
     room_sessions = connection_manager.get_room_sessions(str(room.room_id))
 
@@ -162,9 +163,9 @@ async def broadcast_room_playing_checkpoint(room: GameRoom, game_state, players,
         # Create personalized checkpoint for this player
         checkpoint_data = await create_room_playing_checkpoint_for_player(room, game_state, players, session_id, db)
 
-        # Send checkpoint directly to this player
+        # Create sequenced checkpoint and send to this specific player
         checkpoint = connection_manager.sequencer.create_checkpoint(
-            str(room.room_id), room.phase.value, checkpoint_data)
+            str(room.room_id), "IN_GAME", checkpoint_data)
         await connection_manager.send_to_session(session_id, checkpoint.to_dict())
 
 
@@ -180,7 +181,6 @@ async def websocket_endpoint(
 
     try:
         # Authenticate
-        print(session_token)
         session = await authenticate_websocket(websocket, session_token, db)
         if not session:
             await websocket.close(code=4001, reason="Unauthorized")
@@ -208,6 +208,8 @@ async def websocket_endpoint(
                 # Create/update room checkpoint for waiting state
                 if room.phase == RoomPhase.WAITING:
                     await create_room_waiting_checkpoint(room, db)
+                elif room.phase == RoomPhase.IN_GAME:
+                    await game_orchestrator._create_player_checkpoint(str(room.room_id), session_id)
 
                 # Synchronize client with current state
                 await connection_manager.synchronize_client(str(room.room_id), session_id)

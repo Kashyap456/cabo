@@ -26,6 +26,5 @@ async def get_db():
 async def check_database_connection() -> bool:
     """Check if database connection is working"""
     async with engine.begin() as conn:
-        res = await conn.execute(text("SELECT 1"))
-        print(res)
+        await conn.execute(text("SELECT 1"))
     return True

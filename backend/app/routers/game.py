@@ -4,6 +4,7 @@ from sqlalchemy import select
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 import uuid
+import logging
 
 from app.core.database import get_db
 from app.middleware.session import get_current_session
@@ -12,7 +13,7 @@ from services.room_manager import RoomManager, AlreadyInRoomError
 from services.game_orchestrator import GameOrchestrator
 from services.connection_manager import ConnectionManager
 
-
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 room_manager = RoomManager()
 
@@ -217,23 +218,23 @@ async def start_game(
 
         # Create CaboGame instance via GameOrchestrator
         if game_orchestrator:
+            logger.info(f"Creating game for room {room.room_id}")
             players = await room_manager.get_room_players(db, room.room_id)
             await game_orchestrator.create_game(room, players, db)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Game orchestrator not found")
 
         return {
             "success": True,
             "room": serialize_room(room)
         }
     except ValueError as e:
-        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-    finally:
-        await db.commit()
 
 
 @router.patch("/{room_code}/config")

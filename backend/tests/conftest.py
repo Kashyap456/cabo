@@ -16,7 +16,6 @@ load_dotenv()
 # Normalize URLs so all tests hit the same DB
 os.environ.setdefault("DATABASE_URL", os.environ["TEST_DATABASE_URL"])
 TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
-print(TEST_DATABASE_URL)
 
 
 @pytest_asyncio.fixture(scope="function")
