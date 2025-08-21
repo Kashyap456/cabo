@@ -3,9 +3,10 @@ import {
   getCardDisplayValue,
   isCardKnown,
   GamePhase,
-} from '../../stores/game_play_state'
-import { useAuthStore } from '../../stores/auth'
-import { useGameWebSocket } from '../../api/game_ws'
+} from '@/stores/game_play_state'
+import { useAuthStore } from '@/stores/auth'
+import { useGameWebSocket } from '@/api/game_ws'
+import { useSpecialActionHandler } from '@/hooks/useSpecialActionHandler'
 import ActionPanel from './ActionPanel'
 
 export default function PlayingView() {
@@ -16,9 +17,12 @@ export default function PlayingView() {
     topDiscardCard,
     drawnCard,
     specialAction,
+    selectedCards,
     stackCalls,
     getCurrentPlayer,
     getPlayerById,
+    selectCard,
+    isCardSelectable,
   } = useGamePlayStore()
 
   const { sessionId } = useAuthStore()
@@ -27,6 +31,9 @@ export default function PlayingView() {
   const activePlayer = getCurrentPlayer()
 
   const isMyTurn = currentPlayer && currentPlayer.id === currentPlayerId
+  
+  // Use the special action handler hook
+  useSpecialActionHandler()
 
   // Handle clicking the drawn card to play it
   const handleDrawnCardClick = () => {
@@ -49,6 +56,34 @@ export default function PlayingView() {
   const handleDeckClick = () => {
     if (isMyTurn && phase === GamePhase.PLAYING && !drawnCard) {
       sendMessage({ type: 'draw_card' })
+    }
+  }
+  
+  // Get instruction text for special actions
+  const getSpecialActionInstruction = (type: string, selectedCount: number) => {
+    switch (type) {
+      case 'VIEW_OWN':
+        return '👆 Click one of your cards to view it'
+      case 'VIEW_OPPONENT':
+        return "👆 Click an opponent's card to view it"
+      case 'SWAP_CARDS':
+        if (selectedCount === 0) {
+          return '👆 Select one of your cards'
+        } else if (selectedCount === 1) {
+          return "👆 Now select an opponent's card to swap with"
+        }
+        return ''
+      case 'KING_VIEW':
+        return '👆 Click any card to view it'
+      case 'KING_SWAP':
+        if (selectedCount === 0) {
+          return '👆 Select the first card for swapping'
+        } else if (selectedCount === 1) {
+          return '👆 Now select the second card to swap with'
+        }
+        return ''
+      default:
+        return ''
     }
   }
 
@@ -88,6 +123,11 @@ export default function PlayingView() {
             {getPlayerById(specialAction.playerId)?.nickname} is performing:{' '}
             {specialAction.type}
           </p>
+          {specialAction.playerId === sessionId && (
+            <div className="mt-2 text-sm text-yellow-600">
+              {getSpecialActionInstruction(specialAction.type, selectedCards.length)}
+            </div>
+          )}
         </div>
       )}
 
@@ -112,7 +152,7 @@ export default function PlayingView() {
               onClick={handleDrawnCardClick}
               className="w-16 h-24 border-2 border-green-400 rounded-lg bg-white flex items-center justify-center text-sm font-medium shadow-lg cursor-pointer hover:bg-green-50 hover:border-green-500 transition-all duration-200 transform hover:scale-105"
             >
-              {getCardDisplayValue(drawnCard)}
+              {getCardDisplayValue(drawnCard, true)}
             </div>
           </div>
           <p className="text-center text-sm text-green-700 mt-2">
@@ -145,7 +185,7 @@ export default function PlayingView() {
           <div className="text-center">
             {topDiscardCard ? (
               <div className="w-16 h-24 bg-white border-2 border-gray-300 rounded-lg flex items-center justify-center font-semibold shadow-lg">
-                {getCardDisplayValue(topDiscardCard)}
+                {getCardDisplayValue(topDiscardCard, true)}
               </div>
             ) : (
               <div className="w-16 h-24 bg-gray-100 border-2 border-gray-300 rounded-lg flex items-center justify-center text-gray-500">
@@ -205,21 +245,35 @@ export default function PlayingView() {
                   drawnCard &&
                   isMyTurn &&
                   phase === GamePhase.PLAYING
+                
+                // Check if this card can be selected for special actions
+                const canSelectForSpecial = isCardSelectable(player.id, cardIndex)
+                const isSelected = selectedCards.some(
+                  s => s.playerId === player.id && s.cardIndex === cardIndex
+                )
+                
+                const handleCardClick = () => {
+                  if (canReplaceCard) {
+                    handleHandCardClick(cardIndex)
+                  } else if (canSelectForSpecial) {
+                    selectCard(player.id, cardIndex)
+                  }
+                }
 
                 return (
                   <div
                     key={card.id}
-                    onClick={() =>
-                      canReplaceCard && handleHandCardClick(cardIndex)
-                    }
+                    onClick={handleCardClick}
                     className={`w-12 h-16 border-2 rounded flex items-center justify-center text-xs font-medium ${
-                      isCardKnown(card)
-                        ? card.isTemporarilyViewed
-                          ? 'bg-green-50 border-green-300 text-green-800'
-                          : 'bg-white border-gray-300'
+                      isCardKnown(card) && card.isTemporarilyViewed
+                        ? 'bg-green-50 border-green-300 text-green-800'
                         : 'bg-gray-100 border-gray-300 text-gray-500'
                     } ${
-                      canReplaceCard
+                      isSelected
+                        ? 'ring-2 ring-purple-500 border-purple-400 bg-purple-50'
+                        : ''
+                    } ${
+                      canReplaceCard || canSelectForSpecial
                         ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 transform hover:scale-105'
                         : ''
                     }`}

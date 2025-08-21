@@ -242,11 +242,15 @@ class RedisManager:
 
         # Parse JSON fields
         for field in ['drawn_card', 'played_card', 'king_viewed_card']:
-            if field in data and data[field] and data[field] != 'None':
+            if field in data and data[field]:
                 try:
-                    data[field] = json.loads(data[field])
+                    parsed = json.loads(data[field])
+                    # json.loads('null') returns None, which is what we want
+                    data[field] = parsed
                 except json.JSONDecodeError:
-                    pass
+                    data[field] = None
+            else:
+                data[field] = None
 
         return data
 

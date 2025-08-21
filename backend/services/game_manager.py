@@ -493,13 +493,16 @@ class CaboGame:
     def _handle_draw_card(self, message: DrawCardMessage) -> Dict[str, Any]:
         """Handle draw card action"""
         if self.state.phase != GamePhase.PLAYING:
+            print(f"DEBUG: Cannot draw - phase is {self.state.phase}, not PLAYING")
             return {"success": False, "error": "Game not in playing phase"}
 
         current_player = self.get_current_player()
         if current_player.player_id != message.player_id:
+            print(f"DEBUG: Cannot draw - current player is {current_player.player_id}, not {message.player_id}")
             return {"success": False, "error": "Not your turn"}
 
         if self.state.drawn_card is not None:
+            print(f"DEBUG: Cannot draw - drawn_card is {self.state.drawn_card}, should be None")
             return {"success": False, "error": "Card already drawn this turn"}
 
         card = self.deck.draw()
@@ -507,6 +510,10 @@ class CaboGame:
             return {"success": False, "error": "Deck is empty"}
 
         self.state.drawn_card = card
+        
+        # Trigger checkpoint to ensure all clients get updated state
+        self._trigger_checkpoint()
+        
         return {
             "success": True,
             "event": GameEvent("card_drawn", {
@@ -821,6 +828,8 @@ class CaboGame:
 
     def _handle_next_turn(self, _: NextTurnMessage) -> Dict[str, Any]:
         """Handle moving to next turn"""
+        print(f"DEBUG: _handle_next_turn - drawn_card before: {self.state.drawn_card}")
+        
         # Check if game should end (if cabo was called and we're returning to caller)
         if self.is_cabo_called():
             next_index = (self.state.current_player_index +
@@ -828,6 +837,7 @@ class CaboGame:
             cabo_caller = self.get_player_by_id(self.state.cabo_caller)
 
             if next_index == self.players.index(cabo_caller):
+                print(f"DEBUG: _handle_next_turn - ending game, drawn_card not cleared")
                 return {
                     "success": True,
                     "next_messages": [EndGameMessage()]
@@ -840,6 +850,7 @@ class CaboGame:
 
         self.state.drawn_card = None
         self.state.played_card = None
+        print(f"DEBUG: _handle_next_turn - drawn_card after clear: {self.state.drawn_card}")
 
         # Trigger checkpoint for turn change
         self._trigger_checkpoint()
@@ -897,27 +908,27 @@ class CaboGame:
         self.state.king_viewed_player = None
         self.state.king_viewed_index = None
 
-    def _transition_after_special_action(self):
+    def _transition_after_special_action(self) -> GameEvent:
         """Transition to next phase after special action completes or times out"""
         if self.state.stack_caller is not None:
             # Move to stack phase instead of turn transition
             self.state.phase = GamePhase.STACK_CALLED
             self.state.stack_timer_id = self._schedule_timeout(
                 StackTimeoutMessage(), 30.0)
+            return GameEvent("game_phase_changed", {
+                "phase": "stack_called",
+                "current_player": self.get_current_player().player_id
+            })
         else:
             # Normal case: start turn transition timer
             self.state.phase = GamePhase.TURN_TRANSITION
             self.state.turn_transition_timer_id = self._schedule_timeout(
                 TurnTransitionTimeoutMessage(), 5.0)
-            
-            # Broadcast phase change
-            return {
-                "success": True,
-                "event": GameEvent("game_phase_changed", {
-                    "phase": "turn_transition",
-                    "current_player": self.get_current_player().player_id
-                })
-            }
+            print(f"DEBUG: Scheduled turn transition timeout, drawn_card is: {self.state.drawn_card}")
+            return GameEvent("game_phase_changed", {
+                "phase": "turn_transition",
+                "current_player": self.get_current_player().player_id
+            })
 
     def _get_special_action_type(self, card: Card) -> str:
         """Get the type of special action for a card"""
@@ -953,15 +964,21 @@ class CaboGame:
 
         self._clear_special_action_state()
 
+        events = []
+        events.append(GameEvent("card_viewed", {
+            "player": player.name,
+            "player_id": player.player_id,
+            "card_index": message.card_index,
+            "card": str(player.hand[message.card_index])
+        }))
+        
         # Transition to next phase (stack or turn transition)
-        self._transition_after_special_action()
+        phase_event = self._transition_after_special_action()
+        events.append(phase_event)
 
         return {
             "success": True,
-            "event": GameEvent("card_viewed", {
-                "player": player.name,
-                "card": str(player.hand[message.card_index])
-            })
+            "events": events
         }
 
     def _handle_view_opponent_card(self, message: ViewOpponentCardMessage) -> Dict[str, Any]:
@@ -993,16 +1010,23 @@ class CaboGame:
 
         self._clear_special_action_state()
 
+        events = []
+        events.append(GameEvent("opponent_card_viewed", {
+            "viewer": self.get_player_by_id(message.player_id).name,
+            "viewer_id": message.player_id,
+            "target": target_player.name,
+            "target_id": target_player.player_id,
+            "card_index": message.card_index,
+            "card": str(viewed_card)
+        }))
+        
         # Transition to next phase (stack or turn transition)
-        self._transition_after_special_action()
+        phase_event = self._transition_after_special_action()
+        events.append(phase_event)
 
         return {
             "success": True,
-            "event": GameEvent("opponent_card_viewed", {
-                "viewer": self.get_player_by_id(message.player_id).name,
-                "target": target_player.name,
-                "card": str(viewed_card)
-            })
+            "events": events
         }
 
     def _handle_swap_cards(self, message: SwapCardsMessage) -> Dict[str, Any]:
@@ -1037,17 +1061,23 @@ class CaboGame:
 
         self._clear_special_action_state()
 
+        events = []
+        events.append(GameEvent("cards_swapped", {
+            "player": player.name,
+            "player_id": player.player_id,
+            "target": target_player.name,
+            "target_id": target_player.player_id,
+            "player_card": str(player_card),
+            "target_card": str(target_card)
+        }))
+        
         # Transition to next phase (stack or turn transition)
-        self._transition_after_special_action()
+        phase_event = self._transition_after_special_action()
+        events.append(phase_event)
 
         return {
             "success": True,
-            "event": GameEvent("cards_swapped", {
-                "player": player.name,
-                "target": target_player.name,
-                "player_card": str(player_card),
-                "target_card": str(target_card)
-            })
+            "events": events
         }
 
     def _handle_king_view_card(self, message: KingViewCardMessage) -> Dict[str, Any]:
@@ -1077,13 +1107,24 @@ class CaboGame:
         # Move to swap phase
         self.state.phase = GamePhase.KING_SWAP_PHASE
 
+        events = []
+        events.append(GameEvent("king_card_viewed", {
+            "viewer": self.get_player_by_id(message.player_id).name,
+            "viewer_id": message.player_id,
+            "target": target_player.name,
+            "target_id": message.target_player_id,
+            "card_index": message.card_index,
+            "card": str(self.state.king_viewed_card)
+        }))
+        
+        events.append(GameEvent("game_phase_changed", {
+            "phase": "king_swap_phase",
+            "current_player": self.get_current_player().player_id
+        }))
+
         return {
             "success": True,
-            "event": GameEvent("king_card_viewed", {
-                "viewer": self.get_player_by_id(message.player_id).name,
-                "target": target_player.name,
-                "card": str(self.state.king_viewed_card)
-            })
+            "events": events
         }
 
     def _handle_king_swap_cards(self, message: KingSwapCardsMessage) -> Dict[str, Any]:
@@ -1116,17 +1157,23 @@ class CaboGame:
         self._clear_king_state()
         self._clear_special_action_state()
 
+        events = []
+        events.append(GameEvent("king_cards_swapped", {
+            "player": player.name,
+            "player_id": player.player_id,
+            "target": target_player.name,
+            "target_id": target_player.player_id,
+            "player_card": str(player_card),
+            "target_card": str(target_card)
+        }))
+        
         # Transition to next phase (stack or turn transition)
-        self._transition_after_special_action()
+        phase_event = self._transition_after_special_action()
+        events.append(phase_event)
 
         return {
             "success": True,
-            "event": GameEvent("king_cards_swapped", {
-                "player": player.name,
-                "target": target_player.name,
-                "player_card": str(player_card),
-                "target_card": str(target_card)
-            })
+            "events": events
         }
 
     def _handle_king_skip_swap(self, message: KingSkipSwapMessage) -> Dict[str, Any]:
@@ -1140,14 +1187,19 @@ class CaboGame:
         self._clear_king_state()
         self._clear_special_action_state()
 
+        events = []
+        events.append(GameEvent("king_swap_skipped", {
+            "player": self.get_player_by_id(message.player_id).name,
+            "player_id": message.player_id
+        }))
+        
         # Transition to next phase (stack or turn transition)
-        self._transition_after_special_action()
+        phase_event = self._transition_after_special_action()
+        events.append(phase_event)
 
         return {
             "success": True,
-            "event": GameEvent("king_swap_skipped", {
-                "player": self.get_player_by_id(message.player_id).name
-            })
+            "events": events
         }
 
     def _handle_special_action_timeout(self, message: SpecialActionTimeoutMessage) -> Dict[str, Any]:
@@ -1156,12 +1208,16 @@ class CaboGame:
         self._clear_special_action_state()
         self._clear_king_state()
 
+        events = []
+        events.append(GameEvent("special_action_timeout", {}))
+        
         # Transition to next phase (stack or turn transition)
-        self._transition_after_special_action()
+        phase_event = self._transition_after_special_action()
+        events.append(phase_event)
 
         return {
             "success": True,
-            "event": GameEvent("special_action_timeout", {})
+            "events": events
         }
 
     def _handle_setup_timeout(self, message: SetupTimeoutMessage) -> Dict[str, Any]:
@@ -1193,6 +1249,7 @@ class CaboGame:
 
     def _handle_turn_transition_timeout(self, message: TurnTransitionTimeoutMessage) -> Dict[str, Any]:
         """Handle turn transition timeout"""
+        print(f"DEBUG: _handle_turn_transition_timeout called, adding NextTurnMessage")
         # Clear turn transition state
         if self.state.turn_transition_timer_id:
             self.pending_timeouts.pop(

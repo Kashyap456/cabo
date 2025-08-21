@@ -83,6 +83,14 @@ class GameOrchestrator:
         """Main game loop - processes messages from Redis queue"""
         logger.info(f"Starting message processor for room {room_id}")
 
+        # Load game ONCE at startup and keep it in memory
+        initial_game_data = await self.game_store.load_game(room_id)
+        if not initial_game_data:
+            logger.error(f"Failed to load initial game for room {room_id}")
+            return
+        
+        game, room_code = initial_game_data
+
         try:
             while True:
                 # Check if game has ended
@@ -102,14 +110,8 @@ class GameOrchestrator:
 
                 # Always process (even with empty message list, to handle timeouts)
                 try:
-                    game_data = await self.game_store.load_game(room_id)
-
-                    if not game_data:
-                        logger.error(f"Failed to load game for room {room_id}")
-                        continue
-
-                    game, room_code = game_data
-                    
+                    # Use the IN-MEMORY game instance - DON'T reload from Redis!
+                    # This preserves state changes like drawn_card between iterations
 
                     # Add all messages to the game in FIFO order
                     for message_data in messages:
@@ -125,6 +127,7 @@ class GameOrchestrator:
 
                     # Save and publish if there were events or messages to process
                     if events or messages:
+                        print(f"DEBUG: Saving game, drawn_card = {game.state.drawn_card}")
                         await self.game_store.save_game(room_id, game, room_code)
 
                         for event in events:
@@ -326,39 +329,12 @@ class GameOrchestrator:
 
     async def _broadcast_game_event(self, room_id: str, event: GameEvent):
         """Broadcast game event to all players in room with sequence numbers"""
-        # Special handling for card_drawn event
-        if event.event_type == "card_drawn":
-            player_id = event.data.get("player_id")
-            card_str = event.data.get("card")
-
-            # Send personalized events
-            room_sessions = self.connection_manager.get_room_sessions(room_id)
-            for session_id in room_sessions:
-                event_data = dict(event.data)
-                if session_id == player_id:
-                    # Drawing player sees the actual card
-                    event_data["card"] = card_str
-                else:
-                    # Others see "hidden"
-                    event_data["card"] = "hidden"
-
-                # Create personalized message with sequencer
-                personalized_msg = self.connection_manager.sequencer.add_message(
-                    room_id, "game_event", {
-                        "event_type": event.event_type,
-                        "data": event_data,
-                        "timestamp": event.timestamp
-                    }
-                )
-
-                await self.connection_manager.send_to_session(session_id, personalized_msg.to_dict())
-        else:
-            # Normal broadcast for other events using sequencer
-            await self.connection_manager.send_sequenced_message(room_id, "game_event", {
-                "event_type": event.event_type,
-                "data": event.data,
-                "timestamp": event.timestamp
-            })
+        # Simple broadcast for all events - let frontend handle visibility
+        await self.connection_manager.send_sequenced_message(room_id, "game_event", {
+            "event_type": event.event_type,
+            "data": event.data,
+            "timestamp": event.timestamp
+        })
 
     async def _broadcast_game_state(self, room_id: str):
         """Broadcast personalized game state to all players"""

@@ -58,6 +58,11 @@ export interface SpecialAction {
   isComplete: boolean
 }
 
+export interface CardSelection {
+  playerId: string
+  cardIndex: number
+}
+
 export interface StackCall {
   playerId: string
   nickname: string
@@ -85,6 +90,9 @@ export interface GamePlayState {
   // Special states
   specialAction: SpecialAction | null
   
+  // Card selection for special actions
+  selectedCards: CardSelection[]
+  
   // Stack calls can happen during special actions
   stackCalls: StackCall[]
   pendingStackCall: StackCall | null  // The first stack call that will be processed
@@ -101,6 +109,8 @@ export interface GamePlayState {
   addCardToDiscard: (card: Card) => void
   setDrawnCard: (card: Card | null) => void
   setSpecialAction: (action: SpecialAction | null) => void
+  selectCard: (playerId: string, cardIndex: number) => void
+  clearSelectedCards: () => void
   addStackCall: (stackCall: StackCall) => void
   setPendingStackCall: (stackCall: StackCall | null) => void
   clearStackCalls: () => void
@@ -113,6 +123,7 @@ export interface GamePlayState {
   getPlayerById: (id: string) => PlayerGameState | null
   canCallStack: () => boolean
   hasStackCalls: () => boolean
+  isCardSelectable: (playerId: string, cardIndex: number) => boolean
 }
 
 export const useGamePlayStore = create<GamePlayState>((set, get) => ({
@@ -125,6 +136,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   topDiscardCard: null,
   drawnCard: null,
   specialAction: null,
+  selectedCards: [],
   stackCalls: [],
   pendingStackCall: null,
   caboCalledBy: null,
@@ -158,7 +170,28 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     return { drawnCard: card }
   }),
   
-  setSpecialAction: (action) => set({ specialAction: action }),
+  setSpecialAction: (action) => set({ specialAction: action, selectedCards: [] }),
+  
+  selectCard: (playerId, cardIndex) => set((state) => {
+    // Check if this card is already selected
+    const existingIndex = state.selectedCards.findIndex(
+      s => s.playerId === playerId && s.cardIndex === cardIndex
+    )
+    
+    if (existingIndex >= 0) {
+      // Deselect if already selected
+      return {
+        selectedCards: state.selectedCards.filter((_, i) => i !== existingIndex)
+      }
+    }
+    
+    // Add to selection
+    return {
+      selectedCards: [...state.selectedCards, { playerId, cardIndex }]
+    }
+  }),
+  
+  clearSelectedCards: () => set({ selectedCards: [] }),
   
   addStackCall: (stackCall) => set((state) => {
     const newStackCalls = [...state.stackCalls, stackCall]
@@ -190,6 +223,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     topDiscardCard: null,
     drawnCard: null,
     specialAction: null,
+    selectedCards: [],
     stackCalls: [],
     pendingStackCall: null,
     caboCalledBy: null,
@@ -226,6 +260,45 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   hasStackCalls: () => {
     const state = get()
     return state.stackCalls.length > 0
+  },
+  
+  isCardSelectable: (playerId, cardIndex) => {
+    const state = get()
+    const { phase, specialAction, currentPlayerId } = state
+    
+    // Not selectable if no special action or not in the right phase
+    if (!specialAction || 
+        (phase !== GamePhase.WAITING_FOR_SPECIAL_ACTION && 
+         phase !== GamePhase.KING_VIEW_PHASE && 
+         phase !== GamePhase.KING_SWAP_PHASE)) {
+      return false
+    }
+    
+    // Only the current player can select during their special action
+    if (specialAction.playerId !== currentPlayerId) {
+      return false
+    }
+    
+    // Check based on special action type
+    switch (specialAction.type) {
+      case 'VIEW_OWN':
+        // Can only select own cards
+        return playerId === currentPlayerId
+      case 'VIEW_OPPONENT':
+        // Can only select opponent cards
+        return playerId !== currentPlayerId
+      case 'SWAP_CARDS':
+        // Can select any card (own or opponent)
+        return true
+      case 'KING_VIEW':
+        // Can view any card
+        return true
+      case 'KING_SWAP':
+        // Can select any card for swapping
+        return true
+      default:
+        return false
+    }
   }
 }))
 
@@ -247,8 +320,12 @@ export const isCardKnown = (card: Card): boolean => {
   return card.rank !== '?' && card.suit !== '?'
 }
 
-export const getCardDisplayValue = (card: Card): string => {
+export const getCardDisplayValue = (card: Card, alwaysShow = false): string => {
+  // Check if we should show the card value
   if (!isCardKnown(card)) return '?'
+  
+  // For player cards, only show if temporarily viewed or if alwaysShow is true
+  if (!alwaysShow && !card.isTemporarilyViewed) return '?'
   
   if (card.rank === Rank.JOKER) return 'Joker'
   

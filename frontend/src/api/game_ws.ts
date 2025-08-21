@@ -174,7 +174,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'game_phase_changed': {
-      console.log('Game phase changed to:', gameEvent.data.phase)
+      console.log('Game phase changed to:', gameEvent.data.phase, 'with data:', gameEvent.data)
       const newPhase = gameEvent.data.phase as GamePhase
       setPhase(newPhase)
       
@@ -183,13 +183,42 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         const currentUserId = useAuthStore.getState().sessionId
         const players = useGamePlayStore.getState().players
         
-        // Clear isTemporarilyViewed flag from all cards
+        // Clear isTemporarilyViewed flag from all cards (hide setup cards)
         players.forEach(player => {
           const updatedCards = player.cards.map(card => ({
             ...card,
             isTemporarilyViewed: false
           }))
           updatePlayerCards(player.id, updatedCards)
+        })
+      }
+      
+      // Set special action when entering special action phases
+      if (newPhase === 'waiting_for_special_action' || newPhase === 'king_view_phase' || newPhase === 'king_swap_phase') {
+        const currentUserId = useAuthStore.getState().sessionId
+        const actionType = gameEvent.data.special_action_type
+        
+        // Map backend action types to frontend types
+        let frontendActionType: 'VIEW_OWN' | 'VIEW_OPPONENT' | 'SWAP_CARDS' | 'KING_VIEW' | 'KING_SWAP'
+        if (newPhase === 'king_view_phase') {
+          frontendActionType = 'KING_VIEW'
+        } else if (newPhase === 'king_swap_phase') {
+          frontendActionType = 'KING_SWAP'
+        } else if (actionType === 'view_own') {
+          frontendActionType = 'VIEW_OWN'
+        } else if (actionType === 'view_opponent') {
+          frontendActionType = 'VIEW_OPPONENT'
+        } else if (actionType === 'swap_opponent') {
+          frontendActionType = 'SWAP_CARDS'
+        } else {
+          console.warn('Unknown special action type:', actionType)
+          frontendActionType = 'VIEW_OWN' // Default fallback
+        }
+        
+        setSpecialAction({
+          type: frontendActionType,
+          playerId: gameEvent.data.current_player,
+          isComplete: false
         })
       }
       
@@ -203,6 +232,19 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       console.log('Turn changed to player:', gameEvent.data.current_player_name)
       const currentUserId = useAuthStore.getState().sessionId
       setCurrentPlayer(gameEvent.data.current_player)
+      
+      // When turn changes, we're back in the playing phase
+      setPhase(GamePhase.PLAYING)
+      
+      // Clear all temporarily viewed cards when turn changes
+      const players = useGamePlayStore.getState().players
+      players.forEach(player => {
+        const updatedCards = player.cards.map(card => ({
+          ...card,
+          isTemporarilyViewed: false
+        }))
+        updatePlayerCards(player.id, updatedCards)
+      })
       
       // Clear drawn card if it's not our turn anymore
       if (gameEvent.data.current_player !== currentUserId) {
@@ -221,10 +263,11 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         if (typeof cardData === 'string') {
           // Parse card string from backend (e.g., "3♥", "K♠", "Joker")
           const parsedCard = parseCardString(cardData)
-          setDrawnCard({ ...parsedCard, id: `drawn_${gameEvent.data.player_id}_${Date.now()}` })
+          setDrawnCard({ ...parsedCard, id: `drawn_${gameEvent.data.player_id}_${Date.now()}`, isTemporarilyViewed: true })
         } else if (typeof cardData === 'object') {
           // Handle object format (fallback)
-          setDrawnCard({ ...convertCard(cardData), id: `drawn_${gameEvent.data.player_id}_${Date.now()}` })
+          const drawnCard = convertCard(cardData)
+          setDrawnCard({ ...drawnCard, id: `drawn_${gameEvent.data.player_id}_${Date.now()}`, isTemporarilyViewed: true })
         }
       } else if (gameEvent.data.player_id !== currentUserId) {
         // Clear drawn card when another player draws
@@ -329,16 +372,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
             updatedCards[gameEvent.data.card_index] = { ...viewedCard, isTemporarilyViewed: true }
             updatePlayerCards(gameEvent.data.player_id, updatedCards)
             
-            // Clear the temporary view after a few seconds
-            setTimeout(() => {
-              const currentPlayer = getPlayerById(gameEvent.data.player_id)
-              if (currentPlayer) {
-                const resetCards = currentPlayer.cards.map(card => 
-                  card.id === viewedCard.id ? { ...card, isTemporarilyViewed: false } : card
-                )
-                updatePlayerCards(gameEvent.data.player_id, resetCards)
-              }
-            }, 3000)
+            // Don't auto-hide during special actions - will be cleared on turn change
+            // This keeps the card visible until the turn actually changes
           }
         }
       }
@@ -347,7 +382,22 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'opponent_card_viewed': {
       console.log('Opponent card viewed by:', gameEvent.data.viewer, 'target:', gameEvent.data.target)
-      // Handle opponent card viewing
+      // Show the viewed card to the viewer only
+      const currentUserId = useAuthStore.getState().sessionId
+      if (gameEvent.data.viewer_id === currentUserId && 
+          gameEvent.data.target_id && 
+          gameEvent.data.card_index !== undefined && 
+          gameEvent.data.card) {
+        const targetPlayer = getPlayerById(gameEvent.data.target_id)
+        if (targetPlayer) {
+          const updatedCards = [...targetPlayer.cards]
+          if (updatedCards[gameEvent.data.card_index]) {
+            const viewedCard = convertCard(gameEvent.data.card)
+            updatedCards[gameEvent.data.card_index] = { ...viewedCard, isTemporarilyViewed: true }
+            updatePlayerCards(gameEvent.data.target_id, updatedCards)
+          }
+        }
+      }
       break
     }
 
@@ -364,13 +414,32 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'king_card_viewed': {
-      console.log('King card viewed by:', gameEvent.data.viewer, 'target:', gameEvent.data.target)
-      setSpecialAction({
-        type: 'KING_VIEW',
-        playerId: gameEvent.data.viewer_id || '',
-        targetPlayerId: gameEvent.data.target_id,
-        isComplete: true
-      })
+      console.log('King card viewed by:', gameEvent.data.viewer, 'target:', gameEvent.data.target, 'card:', gameEvent.data.card)
+      
+      // Show the viewed card to the viewer only
+      const currentUserId = useAuthStore.getState().sessionId
+      if (gameEvent.data.viewer_id === currentUserId && 
+          gameEvent.data.target_id && 
+          gameEvent.data.card_index !== undefined && 
+          gameEvent.data.card) {
+        const targetPlayer = getPlayerById(gameEvent.data.target_id)
+        if (targetPlayer) {
+          const updatedCards = [...targetPlayer.cards]
+          if (updatedCards[gameEvent.data.card_index]) {
+            // Parse the card string (e.g., "3♥", "K♠", "Joker")
+            const parsedCard = parseCardString(gameEvent.data.card)
+            updatedCards[gameEvent.data.card_index] = { 
+              ...parsedCard, 
+              id: `${gameEvent.data.target_id}_${gameEvent.data.card_index}`,
+              isTemporarilyViewed: true 
+            }
+            updatePlayerCards(gameEvent.data.target_id, updatedCards)
+          }
+        }
+      }
+      
+      // Phase should change to KING_SWAP_PHASE automatically via game_phase_changed event
+      // Don't modify special action here
       break
     }
 
@@ -568,6 +637,8 @@ export const useGameWebSocket = () => {
         resetGameState()
         
         // Apply game state atomically
+        const gamePhase = playingState.game.phase as GamePhase
+        
         const gamePlayers = playingState.game.players.map(p => ({
           id: p.id,
           nickname: p.nickname,
@@ -578,7 +649,7 @@ export const useGameWebSocket = () => {
         // Update all game state at once to avoid partial updates
         setGamePlayers(gamePlayers)
         setCurrentPlayer(playingState.game.current_player_id)
-        setGamePhase(playingState.game.phase as GamePhase)
+        setGamePhase(gamePhase)
         
         // Set discard pile with only the top card if it exists
         if (playingState.game.top_discard_card) {
@@ -591,9 +662,11 @@ export const useGameWebSocket = () => {
           // Handle both object and string formats for drawn card
           if (typeof playingState.game.drawn_card === 'string') {
             const parsedCard = parseCardString(playingState.game.drawn_card)
-            setDrawnCard({ ...parsedCard, id: `drawn_${playingState.game.current_player_id}` })
+            setDrawnCard({ ...parsedCard, id: `drawn_${playingState.game.current_player_id}_${Date.now()}`, isTemporarilyViewed: true })
           } else {
-            setDrawnCard({ ...convertCard(playingState.game.drawn_card), id: `drawn_${playingState.game.current_player_id}` })
+            // Ensure drawn card has isTemporarilyViewed set to true
+            const drawnCard = convertCard(playingState.game.drawn_card)
+            setDrawnCard({ ...drawnCard, id: `drawn_${playingState.game.current_player_id}_${Date.now()}`, isTemporarilyViewed: true })
           }
         } else {
           setDrawnCard(null)

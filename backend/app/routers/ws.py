@@ -95,7 +95,7 @@ def serialize_card_for_player(card, viewer_id: str, owner_id: str, card_index: i
             "id": f"drawn_{viewer_id}",
             "rank": card.rank.value if hasattr(card.rank, 'value') else card.rank,
             "suit": card.suit.value if card.suit and hasattr(card.suit, 'value') else card.suit,
-            "isTemporarilyViewed": False
+            "isTemporarilyViewed": True  # Drawn card should always be visible
         }
 
     # Other cards are hidden
