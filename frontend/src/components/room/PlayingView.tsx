@@ -18,7 +18,7 @@ export default function PlayingView() {
     drawnCard,
     specialAction,
     selectedCards,
-    stackCalls,
+    stackCaller,
     getCurrentPlayer,
     getPlayerById,
     selectCard,
@@ -131,15 +131,13 @@ export default function PlayingView() {
         </div>
       )}
 
-      {/* Stack Calls */}
-      {stackCalls.length > 0 && (
+      {/* Stack Caller */}
+      {stackCaller && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <h3 className="font-semibold text-red-800 mb-2">Stack Called!</h3>
-          {stackCalls.map((call, index) => (
-            <p key={index} className="text-red-700">
-              {call.nickname} called STACK!
-            </p>
-          ))}
+          <p className="text-red-700">
+            {stackCaller.nickname} called STACK!
+          </p>
         </div>
       )}
 
@@ -256,7 +254,26 @@ export default function PlayingView() {
                   if (canReplaceCard) {
                     handleHandCardClick(cardIndex)
                   } else if (canSelectForSpecial) {
+                    // This now handles both special actions and stack selection
                     selectCard(player.id, cardIndex)
+                    
+                    // If we're in stack mode and just selected a card, send the execute message
+                    if (phase === GamePhase.STACK_CALLED && stackCaller?.playerId === sessionId) {
+                      if (player.id === sessionId) {
+                        // Stacking own card
+                        sendMessage({
+                          type: 'execute_stack',
+                          card_index: cardIndex
+                        })
+                      } else {
+                        // Stacking opponent's card
+                        sendMessage({
+                          type: 'execute_stack',
+                          card_index: cardIndex,
+                          target_player_id: player.id
+                        })
+                      }
+                    }
                   }
                 }
 

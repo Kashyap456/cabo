@@ -63,11 +63,9 @@ export interface CardSelection {
   cardIndex: number
 }
 
-export interface StackCall {
+export interface StackCaller {
   playerId: string
   nickname: string
-  cardPlayed?: Card  // The card they're attempting to stack with
-  isSuccessful?: boolean
   timestamp: number  // When the stack call was made
 }
 
@@ -93,9 +91,8 @@ export interface GamePlayState {
   // Card selection for special actions
   selectedCards: CardSelection[]
   
-  // Stack calls can happen during special actions
-  stackCalls: StackCall[]
-  pendingStackCall: StackCall | null  // The first stack call that will be processed
+  // Stack caller - only one can win the race
+  stackCaller: StackCaller | null
   
   // Cabo state
   caboCalledBy: string | null
@@ -111,9 +108,8 @@ export interface GamePlayState {
   setSpecialAction: (action: SpecialAction | null) => void
   selectCard: (playerId: string, cardIndex: number) => void
   clearSelectedCards: () => void
-  addStackCall: (stackCall: StackCall) => void
-  setPendingStackCall: (stackCall: StackCall | null) => void
-  clearStackCalls: () => void
+  setStackCaller: (stackCaller: StackCaller | null) => void
+  clearStackCaller: () => void
   setCalledCabo: (playerId: string) => void
   resetGameState: () => void
   setDiscardPile: (cards: Card[]) => void
@@ -122,7 +118,7 @@ export interface GamePlayState {
   getCurrentPlayer: () => PlayerGameState | null
   getPlayerById: (id: string) => PlayerGameState | null
   canCallStack: () => boolean
-  hasStackCalls: () => boolean
+  hasStackCaller: () => boolean
   isCardSelectable: (playerId: string, cardIndex: number) => boolean
 }
 
@@ -137,8 +133,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   drawnCard: null,
   specialAction: null,
   selectedCards: [],
-  stackCalls: [],
-  pendingStackCall: null,
+  stackCaller: null,
   caboCalledBy: null,
   finalRoundStarted: false,
   
@@ -193,18 +188,9 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   
   clearSelectedCards: () => set({ selectedCards: [] }),
   
-  addStackCall: (stackCall) => set((state) => {
-    const newStackCalls = [...state.stackCalls, stackCall]
-    return {
-      stackCalls: newStackCalls,
-      // Set pending stack call to the first one if none exists
-      pendingStackCall: state.pendingStackCall || stackCall
-    }
-  }),
+  setStackCaller: (stackCaller) => set({ stackCaller }),
   
-  setPendingStackCall: (stackCall) => set({ pendingStackCall: stackCall }),
-  
-  clearStackCalls: () => set({ stackCalls: [], pendingStackCall: null }),
+  clearStackCaller: () => set({ stackCaller: null }),
   
   setCalledCabo: (playerId) => set((state) => ({
     players: state.players.map(p =>
@@ -224,8 +210,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     drawnCard: null,
     specialAction: null,
     selectedCards: [],
-    stackCalls: [],
-    pendingStackCall: null,
+    stackCaller: null,
     caboCalledBy: null,
     finalRoundStarted: false
   }),
@@ -257,14 +242,20 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
            state.phase !== GamePhase.STACK_CALLED
   },
   
-  hasStackCalls: () => {
+  hasStackCaller: () => {
     const state = get()
-    return state.stackCalls.length > 0
+    return state.stackCaller !== null
   },
   
   isCardSelectable: (playerId, cardIndex) => {
     const state = get()
-    const { phase, specialAction, currentPlayerId } = state
+    const { phase, specialAction, currentPlayerId, stackCaller } = state
+    
+    // Check if we're in stack selection mode
+    if (phase === GamePhase.STACK_CALLED && stackCaller?.playerId === currentPlayerId) {
+      // During stack, can select any card (own or opponent's)
+      return true
+    }
     
     // Not selectable if no special action or not in the right phase
     if (!specialAction || 

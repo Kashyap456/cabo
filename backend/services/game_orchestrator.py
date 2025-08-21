@@ -11,7 +11,7 @@ from services.game_manager import (
     DrawCardMessage, PlayDrawnCardMessage, ReplaceAndPlayMessage,
     CallStackMessage, ExecuteStackMessage, CallCaboMessage,
     ViewOwnCardMessage, ViewOpponentCardMessage, SwapCardsMessage,
-    KingViewCardMessage, KingSwapCardsMessage, KingSkipSwapMessage,
+    KingViewCardMessage, KingSwapCardsMessage, KingSkipSwapMessage, SkipSwapMessage,
     GamePhase
 )
 from services.connection_manager import ConnectionManager
@@ -308,6 +308,8 @@ class GameOrchestrator:
                     target_player_id=data.get("target_player_id", ""),
                     target_index=data.get("target_index", 0)
                 )
+            elif msg_type == "skip_swap":
+                return SkipSwapMessage(player_id=session_id)
             elif msg_type == "king_skip_swap":
                 return KingSkipSwapMessage(player_id=session_id)
             else:

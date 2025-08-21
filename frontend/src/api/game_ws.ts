@@ -121,8 +121,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     addCardToDiscard,
     setDrawnCard,
     setSpecialAction,
-    addStackCall,
-    clearStackCalls,
+    setStackCaller,
+    clearStackCaller,
     setCalledCabo,
     getPlayerById,
     updatePlayerCards,
@@ -333,35 +333,33 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'stack_called': {
       console.log('Stack called by:', gameEvent.data.caller)
-      const caller = getPlayerById(gameEvent.data.caller_id)
-      if (caller) {
-        addStackCall({
-          playerId: gameEvent.data.caller_id,
-          nickname: gameEvent.data.caller,
-          timestamp: (typeof gameEvent.timestamp === 'number' ? gameEvent.timestamp * 1000 : Date.now())
-        })
-      }
+      // Set the single stack winner
+      setStackCaller({
+        playerId: gameEvent.data.caller_id,
+        nickname: gameEvent.data.caller,
+        timestamp: (typeof gameEvent.timestamp === 'number' ? gameEvent.timestamp * 1000 : Date.now())
+      })
       setPhase(GamePhase.STACK_CALLED)
       break
     }
 
     case 'stack_success': {
       console.log('Stack successful:', gameEvent.data.type, 'by', gameEvent.data.player)
-      // Clear stack calls and continue game
-      clearStackCalls()
+      // Clear stack caller and continue game
+      clearStackCaller()
       break
     }
 
     case 'stack_failed': {
       console.log('Stack failed by:', gameEvent.data.player)
-      // Clear stack calls and continue game
-      clearStackCalls()
+      // Clear stack caller and continue game
+      clearStackCaller()
       break
     }
 
     case 'stack_timeout': {
       console.log('Stack timed out for:', gameEvent.data.player)
-      clearStackCalls()
+      clearStackCaller()
       break
     }
 
@@ -484,6 +482,12 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       break
     }
 
+    case 'swap_skipped': {
+      console.log('Swap skipped by:', gameEvent.data.player)
+      setSpecialAction(null)
+      break
+    }
+
     case 'special_action_timeout': {
       console.log('Special action timed out')
       setSpecialAction(null)
@@ -521,7 +525,7 @@ export const useGameWebSocket = () => {
     addCardToDiscard,
     setDrawnCard,
     setSpecialAction,
-    addStackCall
+    setStackCaller
   } = useGamePlayStore()
   
   
@@ -707,12 +711,14 @@ export const useGameWebSocket = () => {
         
         // Set stack caller if exists
         if (playingState.game.stack_caller) {
-          // We'd need to get the nickname for this, for now just add a basic stack call
-          addStackCall({
+          setStackCaller({
             playerId: playingState.game.stack_caller,
             nickname: gamePlayers.find(p => p.id === playingState.game.stack_caller)?.nickname || 'Unknown',
             timestamp: Date.now()
           })
+        } else {
+          // Clear stack caller if not in checkpoint
+          setStackCaller(null)
         }
         
         break

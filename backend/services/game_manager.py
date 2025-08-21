@@ -159,6 +159,7 @@ class MessageType(Enum):
     VIEW_OWN_CARD = "view_own_card"
     VIEW_OPPONENT_CARD = "view_opponent_card"
     SWAP_CARDS = "swap_cards"
+    SKIP_SWAP = "skip_swap"
     KING_VIEW_CARD = "king_view_card"
     KING_SWAP_CARDS = "king_swap_cards"
     KING_SKIP_SWAP = "king_skip_swap"
@@ -237,6 +238,11 @@ class SwapCardsMessage(PlayerActionMessage):
     target_player_id: str = ""
     target_index: int = 0
     type: MessageType = MessageType.SWAP_CARDS
+
+
+@dataclass
+class SkipSwapMessage(PlayerActionMessage):
+    type: MessageType = MessageType.SKIP_SWAP
 
 
 @dataclass
@@ -473,6 +479,7 @@ class CaboGame:
             MessageType.VIEW_OWN_CARD: self._handle_view_own_card,
             MessageType.VIEW_OPPONENT_CARD: self._handle_view_opponent_card,
             MessageType.SWAP_CARDS: self._handle_swap_cards,
+            MessageType.SKIP_SWAP: self._handle_skip_swap,
             MessageType.KING_VIEW_CARD: self._handle_king_view_card,
             MessageType.KING_SWAP_CARDS: self._handle_king_swap_cards,
             MessageType.KING_SKIP_SWAP: self._handle_king_skip_swap,
@@ -684,9 +691,11 @@ class CaboGame:
         self.state.stack_caller = message.player_id
         self.state.stack_timer_id = self._schedule_timeout(
             StackTimeoutMessage(), 30.0)
-        self.pending_timeouts.pop(
-            self.state.turn_transition_timer_id, None)
-        self.state.turn_transition_timer_id = None
+        
+        # Cancel turn transition timer if it exists
+        if self.state.turn_transition_timer_id:
+            self.pending_timeouts.pop(self.state.turn_transition_timer_id, None)
+            self.state.turn_transition_timer_id = None
 
         return {
             "success": True,
@@ -1069,6 +1078,34 @@ class CaboGame:
             "target_id": target_player.player_id,
             "player_card": str(player_card),
             "target_card": str(target_card)
+        }))
+        
+        # Transition to next phase (stack or turn transition)
+        phase_event = self._transition_after_special_action()
+        events.append(phase_event)
+
+        return {
+            "success": True,
+            "events": events
+        }
+
+    def _handle_skip_swap(self, message: SkipSwapMessage) -> Dict[str, Any]:
+        """Handle skipping J/Q swap"""
+        if self.state.special_action_player != message.player_id:
+            return {"success": False, "error": "Not your special action"}
+
+        if self.state.phase != GamePhase.WAITING_FOR_SPECIAL_ACTION:
+            return {"success": False, "error": "Not in special action phase"}
+
+        if self.state.special_action_type != "swap_opponent":
+            return {"success": False, "error": "Not in swap phase"}
+
+        self._clear_special_action_state()
+
+        events = []
+        events.append(GameEvent("swap_skipped", {
+            "player": self.get_player_by_id(message.player_id).name,
+            "player_id": message.player_id
         }))
         
         # Transition to next phase (stack or turn transition)
