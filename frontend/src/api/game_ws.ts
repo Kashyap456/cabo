@@ -191,6 +191,14 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
           }))
           updatePlayerCards(player.id, updatedCards)
         })
+        
+        // Clear special action when returning to playing phase
+        setSpecialAction(null)
+      }
+      
+      // Clear special action when entering turn transition or stack phases
+      if (newPhase === 'turn_transition' || newPhase === 'stack_called') {
+        setSpecialAction(null)
       }
       
       // Set special action when entering special action phases
@@ -235,6 +243,9 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       
       // When turn changes, we're back in the playing phase
       setPhase(GamePhase.PLAYING)
+      
+      // Clear special action when turn changes
+      setSpecialAction(null)
       
       // Clear all temporarily viewed cards when turn changes
       const players = useGamePlayStore.getState().players
@@ -362,14 +373,22 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'card_viewed': {
       console.log('Card viewed by:', gameEvent.data.player)
-      // Update the specific card to show it was viewed if we have the data
-      if (gameEvent.data.player_id && gameEvent.data.card_index !== undefined && gameEvent.data.card) {
+      // Only show the viewed card to the viewer
+      const currentUserId = useAuthStore.getState().sessionId
+      if (gameEvent.data.player_id === currentUserId && 
+          gameEvent.data.card_index !== undefined && 
+          gameEvent.data.card) {
         const player = getPlayerById(gameEvent.data.player_id)
         if (player) {
           const updatedCards = [...player.cards]
           if (updatedCards[gameEvent.data.card_index]) {
-            const viewedCard = convertCard(gameEvent.data.card)
-            updatedCards[gameEvent.data.card_index] = { ...viewedCard, isTemporarilyViewed: true }
+            // Parse the card string (e.g., "3♥", "K♠", "Joker")
+            const parsedCard = parseCardString(gameEvent.data.card)
+            updatedCards[gameEvent.data.card_index] = { 
+              ...parsedCard,
+              id: `${gameEvent.data.player_id}_${gameEvent.data.card_index}`,
+              isTemporarilyViewed: true 
+            }
             updatePlayerCards(gameEvent.data.player_id, updatedCards)
             
             // Don't auto-hide during special actions - will be cleared on turn change
@@ -392,8 +411,13 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         if (targetPlayer) {
           const updatedCards = [...targetPlayer.cards]
           if (updatedCards[gameEvent.data.card_index]) {
-            const viewedCard = convertCard(gameEvent.data.card)
-            updatedCards[gameEvent.data.card_index] = { ...viewedCard, isTemporarilyViewed: true }
+            // Parse the card string (e.g., "3♥", "K♠", "Joker")
+            const parsedCard = parseCardString(gameEvent.data.card)
+            updatedCards[gameEvent.data.card_index] = { 
+              ...parsedCard,
+              id: `${gameEvent.data.target_id}_${gameEvent.data.card_index}`,
+              isTemporarilyViewed: true 
+            }
             updatePlayerCards(gameEvent.data.target_id, updatedCards)
           }
         }
