@@ -329,9 +329,9 @@ class GameState:
     cabo_caller: Optional[str] = None
     final_round_started: bool = False
     winner: Optional[str] = None
-    # Track temporarily viewed cards: {viewer_id: {(target_player_id, card_index)}}
-    temporarily_viewed_cards: defaultdict = field(
-        default_factory=lambda: defaultdict(set))
+    # Simple visibility tracking: {viewer_id: [(target_player_id, card_index)]}
+    card_visibility: Dict[str, List[Tuple[str, int]]] = field(
+        default_factory=lambda: defaultdict(list))
 
 
 class CaboGame:
@@ -356,10 +356,10 @@ class CaboGame:
 
         # Set up initial card visibility (first 2 cards visible during setup)
         for player in self.players:
-            self.state.temporarily_viewed_cards[player.player_id].add(
-                (player.player_id, 0))
-            self.state.temporarily_viewed_cards[player.player_id].add(
-                (player.player_id, 1))
+            self.state.card_visibility[player.player_id] = [
+                (player.player_id, 0),  # Can see own card 0
+                (player.player_id, 1),  # Can see own card 1
+            ]
 
         # Schedule setup timeout (game stays in SETUP phase)
         self.state.setup_timer_id = self._schedule_timeout(
@@ -974,9 +974,13 @@ class CaboGame:
         if not (0 <= message.card_index < len(player.hand)):
             return {"success": False, "error": "Invalid card index"}
 
-        # Add card to temporarily viewed cards
-        self.state.temporarily_viewed_cards[player.player_id].add(
-            (player.player_id, message.card_index))
+        # Add card to visibility
+        if player.player_id not in self.state.card_visibility:
+            self.state.card_visibility[player.player_id] = []
+        
+        entry = (player.player_id, message.card_index)
+        if entry not in self.state.card_visibility[player.player_id]:
+            self.state.card_visibility[player.player_id].append(entry)
 
         self._clear_special_action_state()
 
@@ -1020,9 +1024,13 @@ class CaboGame:
 
         viewed_card = target_player.hand[message.card_index]
 
-        # Add opponent's card to temporarily viewed cards for the viewer
-        self.state.temporarily_viewed_cards[message.player_id].add(
-            (message.target_player_id, message.card_index))
+        # Add opponent's card to viewer's visibility
+        if message.player_id not in self.state.card_visibility:
+            self.state.card_visibility[message.player_id] = []
+        
+        entry = (message.target_player_id, message.card_index)
+        if entry not in self.state.card_visibility[message.player_id]:
+            self.state.card_visibility[message.player_id].append(entry)
 
         self._clear_special_action_state()
 
@@ -1144,9 +1152,13 @@ class CaboGame:
         self.state.king_viewed_player = message.target_player_id
         self.state.king_viewed_index = message.card_index
 
-        # Add card to temporarily viewed cards for the viewer
-        self.state.temporarily_viewed_cards[message.player_id].add(
-            (message.target_player_id, message.card_index))
+        # Add card to viewer's visibility
+        if message.player_id not in self.state.card_visibility:
+            self.state.card_visibility[message.player_id] = []
+        
+        entry = (message.target_player_id, message.card_index)
+        if entry not in self.state.card_visibility[message.player_id]:
+            self.state.card_visibility[message.player_id].append(entry)
 
         # Move to swap phase
         self.state.phase = GamePhase.KING_SWAP_PHASE
@@ -1272,7 +1284,7 @@ class CaboGame:
             self.state.setup_timer_id = None
 
         # Clear initial card visibility (players can no longer see their initial cards)
-        self.state.temporarily_viewed_cards.clear()
+        self.state.card_visibility.clear()
 
         # Choose starting player and transition to PLAYING
         self.state.current_player_index = random.randint(
@@ -1301,7 +1313,7 @@ class CaboGame:
             self.state.turn_transition_timer_id = None
 
         # Clear all temporary card visibility
-        self.state.temporarily_viewed_cards.clear()
+        self.state.card_visibility.clear()
 
         return {
             "success": True,
@@ -1316,6 +1328,64 @@ class CaboGame:
             if player.player_id == player_id:
                 return player
         return None
+
+    def get_complete_game_state(self) -> Dict[str, Any]:
+        """Get complete game state with all cards and visibility map"""
+        return {
+            "game_id": self.game_id,
+            "phase": self.state.phase.value,
+            "current_player": self.get_current_player().player_id if self.players else None,
+            "current_player_name": self.get_current_player().name if self.players else None,
+            "players": [
+                {
+                    "id": player.player_id,
+                    "name": player.name,
+                    "cards": [
+                        {
+                            "id": f"{player.player_id}_{i}",
+                            "rank": card.rank.value if hasattr(card.rank, 'value') else card.rank,
+                            "suit": card.suit.value if card.suit and hasattr(card.suit, 'value') else card.suit
+                        }
+                        for i, card in enumerate(player.hand)
+                    ],
+                    "has_called_cabo": player.has_called_cabo
+                }
+                for player in self.players
+            ],
+            "deck_size": self.deck.size(),
+            "discard_top": {
+                "id": "discard_top",
+                "rank": self.discard_pile[-1].rank.value if hasattr(self.discard_pile[-1].rank, 'value') else self.discard_pile[-1].rank,
+                "suit": self.discard_pile[-1].suit.value if self.discard_pile[-1].suit and hasattr(self.discard_pile[-1].suit, 'value') else self.discard_pile[-1].suit
+            } if self.discard_pile else None,
+            "drawn_card": {
+                "id": "drawn_card",
+                "rank": self.state.drawn_card.rank.value if hasattr(self.state.drawn_card.rank, 'value') else self.state.drawn_card.rank,
+                "suit": self.state.drawn_card.suit.value if self.state.drawn_card.suit and hasattr(self.state.drawn_card.suit, 'value') else self.state.drawn_card.suit,
+                "for_player": self.get_current_player().player_id  # Who can see it
+            } if self.state.drawn_card else None,
+            "played_card": {
+                "id": "played_card",
+                "rank": self.state.played_card.rank.value if hasattr(self.state.played_card.rank, 'value') else self.state.played_card.rank,
+                "suit": self.state.played_card.suit.value if self.state.played_card.suit and hasattr(self.state.played_card.suit, 'value') else self.state.played_card.suit
+            } if self.state.played_card else None,
+            "visibility": {
+                player_id: [
+                    {"player_id": target_id, "card_index": idx}
+                    for target_id, idx in visible_cards
+                ]
+                for player_id, visible_cards in self.state.card_visibility.items()
+                if visible_cards  # Only include if not empty
+            },
+            "stack_caller": self.state.stack_caller,
+            "cabo_caller": self.state.cabo_caller,
+            "final_round_started": self.state.final_round_started,
+            "special_action": {
+                "player": self.state.special_action_player,
+                "type": self.state.special_action_type
+            } if self.state.special_action_player else None,
+            "winner": self.state.winner
+        }
 
     def get_game_state(self, requesting_player_id: str) -> Dict[str, Any]:
         """Get current game state from perspective of requesting player"""

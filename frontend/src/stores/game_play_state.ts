@@ -78,6 +78,9 @@ export interface GamePlayState {
   // Players and their cards
   players: PlayerGameState[]
   
+  // Card visibility map: viewer_id -> [(target_player_id, card_index)]
+  cardVisibility: { [viewerId: string]: Array<[string, number]> }
+  
   // Discard pile
   discardPile: Card[]
   topDiscardCard: Card | null
@@ -103,6 +106,8 @@ export interface GamePlayState {
   setPhase: (phase: GamePhase) => void
   setPlayers: (players: PlayerGameState[]) => void
   updatePlayerCards: (playerId: string, cards: Card[]) => void
+  setCardVisibility: (visibility: { [viewerId: string]: Array<[string, number]> }) => void
+  addVisibleCard: (viewerId: string, targetId: string, cardIndex: number) => void
   addCardToDiscard: (card: Card) => void
   setDrawnCard: (card: Card | null) => void
   setSpecialAction: (action: SpecialAction | null) => void
@@ -128,6 +133,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   phase: GamePhase.SETUP,
   turnNumber: 1,
   players: [],
+  cardVisibility: {},
   discardPile: [],
   topDiscardCard: null,
   drawnCard: null,
@@ -154,6 +160,24 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
       p.id === playerId ? { ...p, cards } : p
     )
   })),
+  
+  setCardVisibility: (visibility) => set({ cardVisibility: visibility }),
+  
+  addVisibleCard: (viewerId, targetId, cardIndex) => set((state) => {
+    const currentVisibility = state.cardVisibility[viewerId] || []
+    // Check if already visible
+    const alreadyVisible = currentVisibility.some(
+      ([t, i]) => t === targetId && i === cardIndex
+    )
+    if (alreadyVisible) return state
+    
+    return {
+      cardVisibility: {
+        ...state.cardVisibility,
+        [viewerId]: [...currentVisibility, [targetId, cardIndex] as [string, number]]
+      }
+    }
+  }),
   
   addCardToDiscard: (card) => set((state) => ({
     discardPile: [...state.discardPile, card],
@@ -205,6 +229,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     phase: GamePhase.SETUP,
     turnNumber: 1,
     players: [],
+    cardVisibility: {},
     discardPile: [],
     topDiscardCard: null,
     drawnCard: null,

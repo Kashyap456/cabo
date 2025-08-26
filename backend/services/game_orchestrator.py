@@ -23,17 +23,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 
+from services.stream_manager import StreamManager
+from services.checkpoint_manager import CheckpointManager
+
+
 class GameOrchestrator:
-    """Game orchestrator that uses Redis for state persistence and message queuing"""
+    """Game orchestrator that uses Redis Streams and unified checkpoints"""
 
     def __init__(self, connection_manager: ConnectionManager):
         self.connection_manager = connection_manager
         self.redis = redis_manager
         self.game_store = redis_game_store
+        self.stream_manager = StreamManager(redis_manager.redis)
+        self.checkpoint_manager = CheckpointManager(redis_manager.redis)
         # room_id -> processing task
         self.processing_tasks: Dict[str, asyncio.Task] = {}
-        # room_id -> event broadcasting task
-        self.event_tasks: Dict[str, asyncio.Task] = {}
+        # NO MORE event_tasks - broadcasting handled by stream_manager
 
     async def create_game(self, room: GameRoom, players: List[UserSession], db: AsyncSession) -> None:
         """Creates new game and stores in Redis"""
@@ -48,36 +53,38 @@ class GameOrchestrator:
         player_ids = [str(p.user_id) for p in players]
         player_names = [p.nickname for p in players]
 
-        # Create game callbacks - we'll handle events differently
-        def broadcast_callback(event: GameEvent):
-            # Do nothing here - events will be collected and published once
-            pass
-
+        # Checkpoint callback that actually works!
         def checkpoint_callback():
-            # Checkpoint saves are handled after each message processing
-            pass
+            asyncio.create_task(self._create_checkpoint_async(room_id))
 
         # Create game instance
-        game = CaboGame(player_ids, player_names,
-                        broadcast_callback, checkpoint_callback)
-        
+        game = CaboGame(
+            player_ids, 
+            player_names,
+            broadcast_callback=lambda e: None,  # Events go through stream
+            checkpoint_callback=checkpoint_callback
+        )
 
         # Save game to Redis
         await self.game_store.save_game(room_id, game, room.room_code)
+        
+        # Create initial checkpoint
+        await self.checkpoint_manager.create_checkpoint(room_id, game, 0)
 
-        # Start processing tasks
+        # Start processing messages
         self.processing_tasks[room_id] = asyncio.create_task(
             self.process_game_messages(room_id)
         )
-        self.event_tasks[room_id] = asyncio.create_task(
-            self.broadcast_game_events(room_id)
+        
+        # Start broadcasting from stream
+        await self.stream_manager.start_broadcast(
+            room_id, 
+            self.connection_manager,
+            from_position="0"  # Start from beginning for new game
         )
 
         logger.info(
             f"Created game for room {room_id} with {len(players)} players")
-
-        # Broadcast initial game state
-        await self._broadcast_game_state(room_id)
 
     async def process_game_messages(self, room_id: str):
         """Main game loop - processes messages from Redis queue"""
@@ -127,11 +134,15 @@ class GameOrchestrator:
 
                     # Save and publish if there were events or messages to process
                     if events or messages:
-                        print(f"DEBUG: Saving game, drawn_card = {game.state.drawn_card}")
                         await self.game_store.save_game(room_id, game, room_code)
 
+                        # Publish events to stream
                         for event in events:
-                            await self._publish_event(room_id, event)
+                            await self.stream_manager.publish_event(
+                                room_id,
+                                event.event_type,
+                                event.data
+                            )
 
                     # If no messages, wait before next iteration
                     if not messages:
@@ -149,68 +160,31 @@ class GameOrchestrator:
         finally:
             await self.end_game(room_id)
 
-    async def broadcast_game_events(self, room_id: str):
-        """Reads events from Redis stream and broadcasts to clients"""
-        logger.info(f"Starting event broadcaster for room {room_id}")
-
-        # Start from the end of the stream (only new events from now on)
-        # Using '$' means start from now, not from beginning
-        last_id = '$'
-
+    async def _create_checkpoint_async(self, room_id: str):
+        """Create checkpoint when game requests it (phase changes)"""
         try:
-            while True:
-                # Check if game has ended
-                if await self.game_store.is_game_ended(room_id):
-                    break
-
-                # Check if there are any connections
-                room_sessions = self.connection_manager.get_room_sessions(
-                    room_id)
-                if not room_sessions:
-                    # No connections, wait a bit
-                    await asyncio.sleep(0.1)
-                    continue
-
-                # Read new events from stream using blocking read
-                stream_key = f"stream:game:{room_id}:events"
-                try:
-                    # Use XREAD with block to wait for new events
-                    result = await self.redis.redis.xread(
-                        {stream_key: last_id},
-                        count=10,
-                        block=50  # Block for 50ms if no new events
-                    )
-
-                    if result:
-                        for stream_name, events in result:
-                            for event_id, data in events:
-                                try:
-                                    event_data = json.loads(
-                                        data.get('event', '{}'))
-                                    event_type = event_data.get('event_type', '')
-                                    await self._broadcast_game_event(room_id, GameEvent(
-                                        event_type=event_type,
-                                        data=event_data.get('data', {}),
-                                        timestamp=event_data.get(
-                                            'timestamp', datetime.utcnow().isoformat())
-                                    ))
-                                    last_id = event_id
-                                except Exception as e:
-                                    logger.warning(
-                                        f"Failed to broadcast event {event_id}: {e}")
-                                    last_id = event_id
-                except Exception as e:
-                    # Handle Redis errors gracefully
-                    if "NOGROUP" not in str(e):  # Ignore consumer group errors
-                        logger.debug(
-                            f"Stream read error for room {room_id}: {e}")
-                    await asyncio.sleep(0.05)
-
-        except asyncio.CancelledError:
-            logger.info(f"Event broadcaster cancelled for room {room_id}")
-            raise
+            game_data = await self.game_store.load_game(room_id)
+            if not game_data:
+                return
+            
+            game, _ = game_data
+            current_seq = self.connection_manager.get_next_sequence(room_id)
+            
+            checkpoint = await self.checkpoint_manager.create_checkpoint(
+                room_id, game, current_seq
+            )
+            
+            # Publish checkpoint event to stream
+            await self.stream_manager.publish_event(
+                room_id,
+                "checkpoint_created",
+                checkpoint.to_dict()
+            )
+            
+            logger.info(f"Created checkpoint for room {room_id} at phase {game.state.phase.value}")
+            
         except Exception as e:
-            logger.error(f"Error in event broadcaster for room {room_id}: {e}")
+            logger.error(f"Failed to create checkpoint: {e}")
 
     async def handle_player_message(self, room_id: str, session_id: str, message: dict):
         """Converts WS message to game message and queues it in Redis"""
@@ -320,127 +294,58 @@ class GameOrchestrator:
             logger.error(f"Error deserializing message: {e}")
             return None
 
-    async def _publish_event(self, room_id: str, event: GameEvent):
-        """Publish game event to Redis stream"""
-        event_data = {
-            "event_type": event.event_type,
-            "data": event.data,
-            "timestamp": event.timestamp
-        }
-        await self.redis.publish_event(room_id, event_data)
 
-    async def _broadcast_game_event(self, room_id: str, event: GameEvent):
-        """Broadcast game event to all players in room with sequence numbers"""
-        # Simple broadcast for all events - let frontend handle visibility
-        await self.connection_manager.send_sequenced_message(room_id, "game_event", {
-            "event_type": event.event_type,
-            "data": event.data,
-            "timestamp": event.timestamp
+    async def handle_player_reconnection(
+        self, 
+        room_id: str, 
+        session_id: str,
+        websocket
+    ):
+        """Handle reconnecting player with checkpoint + replay"""
+        
+        # Get latest checkpoint
+        checkpoint = await self.checkpoint_manager.get_latest_checkpoint(room_id)
+        if not checkpoint:
+            logger.error(f"No checkpoint for room {room_id}")
+            return
+        
+        # Send checkpoint
+        await websocket.send_json(checkpoint.to_dict())
+        
+        # Get player's last position
+        last_position = await self.stream_manager.get_player_position(room_id, session_id)
+        
+        # Use checkpoint position if player has no recorded position
+        start_position = last_position or checkpoint.stream_position
+        
+        # Get missed events
+        missed_events = await self.stream_manager.get_events_since(
+            room_id,
+            start_position
+        )
+        
+        # Send missed events with sequence numbers
+        for stream_id, event_data in missed_events:
+            seq_num = self.connection_manager.get_next_sequence(room_id)
+            await websocket.send_json({
+                "type": "game_event",
+                "stream_id": stream_id,
+                "seq_num": seq_num,
+                **event_data
+            })
+        
+        # Send ready signal
+        await websocket.send_json({
+            "type": "ready",
+            "checkpoint_id": checkpoint.checkpoint_id,
+            "events_replayed": len(missed_events)
         })
-
-    async def _broadcast_game_state(self, room_id: str):
-        """Broadcast personalized game state to all players"""
-        game_data = await self.game_store.load_game(room_id)
-        if not game_data:
-            logger.error(
-                f"No game found for room {room_id} when broadcasting state")
-            return
-
-        game, room_code = game_data
-        room_sessions = self.connection_manager.get_room_sessions(room_id)
-
-        for session_id in room_sessions:
-            checkpoint_data = self._create_player_checkpoint_data(
-                game, session_id, room_id, room_code)
-
-            # Create checkpoint with sequencer (without incrementing)
-            checkpoint = self.connection_manager.sequencer.create_player_checkpoint(
-                room_id, session_id, "IN_GAME", checkpoint_data, increment_seq=False
-            )
-
-            await self.connection_manager.send_to_session(session_id, checkpoint.to_dict())
-
+        
         logger.info(
-            f"Broadcasted game state to {len(room_sessions)} players in room {room_id}")
-
-    async def _create_player_checkpoint(self, room_id: str, session_id: str):
-        """Helper to create a checkpoint for a single player"""
-        game_data = await self.game_store.load_game(room_id)
-        if not game_data:
-            logger.error(
-                f"No game found for room {room_id} when creating checkpoint")
-            return
-
-        game, room_code = game_data
-
-        # Create personalized checkpoint data for this player
-        checkpoint_data = self._create_player_checkpoint_data(
-            game, session_id, room_id, room_code)
-
-        # Store checkpoint without incrementing sequence
-        self.connection_manager.sequencer.create_player_checkpoint(
-            room_id, session_id, "IN_GAME", checkpoint_data, increment_seq=False
+            f"Reconnected {session_id}: checkpoint {checkpoint.checkpoint_id}, "
+            f"replayed {len(missed_events)} events"
         )
 
-        logger.info(
-            f"Created checkpoint for player {session_id} in room {room_id}")
-
-    def _create_player_checkpoint_data(self, game: CaboGame, session_id: str, room_id: str, room_code: str) -> Dict[str, Any]:
-        """Create checkpoint data personalized for a specific player"""
-        from app.routers.ws import serialize_card_for_player
-
-        player = game.get_player_by_id(session_id)
-        if not player:
-            logger.warning(f"Player {session_id} not found in game {room_id}")
-            return {}
-
-        current_player_id = game.get_current_player().player_id if game.players else None
-
-        return {
-            "room": {
-                "room_id": room_id,
-                "room_code": room_code,
-            },
-            "game": {
-                "current_player_id": current_player_id,
-                "phase": game.state.phase.value,
-                "turn_number": getattr(game.state, 'turn_number', 1),
-                "players": [
-                    {
-                        "id": p.player_id,
-                        "nickname": p.name,
-                        "cards": [
-                            serialize_card_for_player(
-                                p.hand[card_index],
-                                session_id,
-                                p.player_id,
-                                card_index,
-                                game.state.temporarily_viewed_cards
-                            )
-                            for card_index in range(len(p.hand))
-                        ],
-                        "has_called_cabo": p.has_called_cabo
-                    }
-                    for p in game.players
-                ],
-                "top_discard_card": serialize_card_for_player(
-                    game.discard_pile[-1], session_id, "discard", 0, {}
-                ) if game.discard_pile else None,
-                "played_card": serialize_card_for_player(
-                    game.state.played_card, session_id, "played", 0, {}
-                ) if game.state.played_card else None,
-                "drawn_card": serialize_card_for_player(
-                    game.state.drawn_card, session_id, "drawn", 0, {}
-                ) if game.state.drawn_card and session_id == current_player_id else None,
-                "special_action": {
-                    "type": game.state.special_action_type,
-                    "player_id": game.state.special_action_player
-                } if game.state.special_action_player else None,
-                "stack_caller": game.state.stack_caller,
-                "cabo_called_by": game.state.cabo_caller,
-                "final_round_started": game.state.final_round_started
-            }
-        }
 
     async def end_game(self, room_id: str):
         """Clean up game resources"""
@@ -451,12 +356,15 @@ class GameOrchestrator:
             self.processing_tasks[room_id].cancel()
             del self.processing_tasks[room_id]
 
-        if room_id in self.event_tasks:
-            self.event_tasks[room_id].cancel()
-            del self.event_tasks[room_id]
+        # Stop stream broadcasting
+        await self.stream_manager.stop_broadcast(room_id)
 
         # Clean up Redis data
         await self.redis.cleanup_game(room_id)
+        
+        # Clean up stream and checkpoints
+        await self.stream_manager.cleanup_stream(room_id)
+        await self.checkpoint_manager.cleanup_checkpoints(room_id)
 
         # Notify all players
         await self.connection_manager.broadcast_to_room(room_id, {
@@ -514,8 +422,15 @@ class GameOrchestrator:
                 orchestrator.processing_tasks[room_id] = asyncio.create_task(
                     orchestrator.process_game_messages(room_id)
                 )
-                orchestrator.event_tasks[room_id] = asyncio.create_task(
-                    orchestrator.broadcast_game_events(room_id)
+                
+                # Start broadcasting from last checkpoint
+                checkpoint = await orchestrator.checkpoint_manager.get_latest_checkpoint(room_id)
+                from_position = checkpoint.stream_position if checkpoint else "0"
+                
+                await orchestrator.stream_manager.start_broadcast(
+                    room_id,
+                    connection_manager,
+                    from_position
                 )
 
                 logger.info(f"Restored game for room {room_id}")

@@ -29,6 +29,57 @@ export interface RoomWaitingStateMessage extends WebSocketMessage {
   }
 }
 
+export interface GameCheckpointMessage extends WebSocketMessage {
+  type: 'game_checkpoint'
+  checkpoint_id: string
+  room_id: string
+  stream_position: string
+  sequence_num: number
+  phase: string
+  game_state: {
+    game_id: string
+    phase: string
+    current_player: string | null
+    current_player_name: string | null
+    players: Array<{
+      id: string
+      name: string
+      cards: Array<{
+        id: string
+        rank: number
+        suit: string | null
+      }>
+      has_called_cabo: boolean
+    }>
+    deck_size: number
+    discard_top: {
+      id: string
+      rank: number
+      suit: string | null
+    } | null
+    drawn_card: {
+      id: string
+      rank: number
+      suit: string | null
+    } | null
+    played_card: {
+      id: string
+      rank: number
+      suit: string | null
+    } | null
+    special_action_player: string | null
+    special_action_type: string | null
+    stack_caller: string | null
+    cabo_caller: string | null
+    final_round_started: boolean
+    card_visibility: {
+      [viewer_id: string]: Array<[string, number]>  // [(target_player_id, card_index)]
+    }
+  }
+  timestamp: string
+}
+
+// Keep old message type for backward compatibility during transition
 export interface RoomPlayingStateMessage extends WebSocketMessage {
   type: 'room_in_game_state'
   seq_num: number
@@ -439,6 +490,9 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
           gameEvent.data.card) {
         const player = getPlayerById(gameEvent.data.player_id)
         if (player) {
+          // Update visibility map
+          addVisibleCard(currentUserId, gameEvent.data.player_id, gameEvent.data.card_index)
+          
           const updatedCards = [...player.cards]
           if (updatedCards[gameEvent.data.card_index]) {
             // Parse the card string (e.g., "3♥", "K♠", "Joker")
@@ -468,6 +522,9 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
           gameEvent.data.card) {
         const targetPlayer = getPlayerById(gameEvent.data.target_id)
         if (targetPlayer) {
+          // Update visibility map
+          addVisibleCard(currentUserId, gameEvent.data.target_id, gameEvent.data.card_index)
+          
           const updatedCards = [...targetPlayer.cards]
           if (updatedCards[gameEvent.data.card_index]) {
             // Parse the card string (e.g., "3♥", "K♠", "Joker")
@@ -703,6 +760,95 @@ export const useGameWebSocket = () => {
         }))
         setPlayers(players)
         setPhase(RoomPhase.WAITING)
+        break
+      }
+      
+      case 'game_checkpoint': {
+        const checkpoint = message as GameCheckpointMessage
+        console.log('Received game checkpoint')
+        
+        // Apply checkpoint state with visibility filtering
+        const currentUserId = useAuthStore.getState().sessionId
+        const gameState = checkpoint.game_state
+        
+        // Process players with visibility filtering
+        const players = gameState.players.map(player => {
+          const cards = player.cards.map((card, index) => {
+            // Check if current user can see this card
+            const visibleCards = gameState.card_visibility[currentUserId] || []
+            const canSee = visibleCards.some(([targetId, cardIdx]) => 
+              targetId === player.id && cardIdx === index
+            )
+            
+            // During setup phase, players can see their first 2 cards
+            const isOwnCard = player.id === currentUserId
+            const isSetupPhase = gameState.phase === 'setup'
+            const isSetupVisible = isOwnCard && isSetupPhase && index < 2
+            
+            return {
+              id: card.id,
+              rank: (canSee || isSetupVisible) ? card.rank : ('?' as const),
+              suit: (canSee || isSetupVisible) ? card.suit : ('?' as const),
+              isTemporarilyViewed: canSee || isSetupVisible
+            }
+          })
+          
+          return {
+            id: player.id,
+            nickname: player.name,
+            cards,
+            hasCalledCabo: player.has_called_cabo
+          }
+        })
+        
+        // Apply game state
+        setPlayers(players)
+        setCurrentPlayer(gameState.current_player || '')
+        setPhase(gameState.phase as GamePhase)
+        
+        // Set drawn card if exists and belongs to current player
+        if (gameState.drawn_card && gameState.current_player === currentUserId) {
+          setDrawnCard(convertCard(gameState.drawn_card))
+        } else {
+          setDrawnCard(null)
+        }
+        
+        // Set discard pile
+        if (gameState.discard_top) {
+          addCardToDiscard(convertCard(gameState.discard_top))
+        }
+        
+        // Set special action
+        if (gameState.special_action_player) {
+          setSpecialAction({
+            type: gameState.special_action_type || '',
+            playerId: gameState.special_action_player
+          })
+        } else {
+          setSpecialAction(null)
+        }
+        
+        // Set stack caller
+        if (gameState.stack_caller) {
+          setStackCaller(gameState.stack_caller)
+        } else {
+          setStackCaller(null)
+        }
+        
+        // Set cabo caller
+        if (gameState.cabo_caller) {
+          setCalledCabo(gameState.cabo_caller, true)
+        }
+        
+        // Update room state
+        setRoomPhase(RoomPhase.IN_GAME)
+        
+        // Send acknowledgment
+        sendMessage({
+          type: 'ack_seq',
+          seq_num: checkpoint.sequence_num
+        })
+        
         break
       }
       
