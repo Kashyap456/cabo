@@ -245,7 +245,7 @@ export default function PlayingView() {
                   phase === GamePhase.PLAYING
                 
                 // Check if this card can be selected for special actions
-                const canSelectForSpecial = isCardSelectable(player.id, cardIndex)
+                const canSelectForSpecial = isCardSelectable(player.id, cardIndex, sessionId)
                 const isSelected = selectedCards.some(
                   s => s.playerId === player.id && s.cardIndex === cardIndex
                 )

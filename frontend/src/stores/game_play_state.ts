@@ -124,7 +124,7 @@ export interface GamePlayState {
   getPlayerById: (id: string) => PlayerGameState | null
   canCallStack: () => boolean
   hasStackCaller: () => boolean
-  isCardSelectable: (playerId: string, cardIndex: number) => boolean
+  isCardSelectable: (playerId: string, cardIndex: number, sessionId?: string) => boolean
 }
 
 export const useGamePlayStore = create<GamePlayState>((set, get) => ({
@@ -272,13 +272,14 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     return state.stackCaller !== null
   },
   
-  isCardSelectable: (playerId, cardIndex) => {
+  isCardSelectable: (playerId, cardIndex, sessionId) => {
     const state = get()
     const { phase, specialAction, currentPlayerId, stackCaller } = state
     
     // Check if we're in stack selection mode
-    if (phase === GamePhase.STACK_CALLED && stackCaller?.playerId === currentPlayerId) {
-      // During stack, can select any card (own or opponent's)
+    // sessionId should be the current user's session ID
+    if (phase === GamePhase.STACK_CALLED && stackCaller?.playerId === sessionId) {
+      // During stack, the stack caller can select any card (own or opponent's)
       return true
     }
     
@@ -291,7 +292,8 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     }
     
     // Only the current player can select during their special action
-    if (specialAction.playerId !== currentPlayerId) {
+    // Use sessionId to check if the current user is the one with the special action
+    if (specialAction.playerId !== sessionId) {
       return false
     }
     
@@ -299,10 +301,10 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     switch (specialAction.type) {
       case 'VIEW_OWN':
         // Can only select own cards
-        return playerId === currentPlayerId
+        return playerId === sessionId
       case 'VIEW_OPPONENT':
         // Can only select opponent cards
-        return playerId !== currentPlayerId
+        return playerId !== sessionId
       case 'SWAP_CARDS':
         // Can select any card (own or opponent)
         return true

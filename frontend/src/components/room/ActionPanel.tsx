@@ -145,6 +145,14 @@ export default function ActionPanel() {
           <p className="text-sm font-semibold text-blue-900">
             Stack Called By: {stackCaller.nickname} {stackCaller.playerId === sessionId && '(You)'}
           </p>
+          {/* Show additional info if stack was called during a special action */}
+          {(phase === GamePhase.WAITING_FOR_SPECIAL_ACTION || 
+            phase === GamePhase.KING_VIEW_PHASE || 
+            phase === GamePhase.KING_SWAP_PHASE) && (
+            <p className="text-xs text-blue-700 mt-1">
+              Stack winner will select after the current action completes
+            </p>
+          )}
         </div>
       )}
 

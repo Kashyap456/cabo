@@ -342,13 +342,22 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'stack_called': {
       console.log('Stack called by:', gameEvent.data.caller)
-      // Set the single stack winner
+      const currentPhase = useGamePlayStore.getState().phase
+      
+      // Set the stack winner
       setStackCaller({
         playerId: gameEvent.data.caller_id,
         nickname: gameEvent.data.caller,
         timestamp: (typeof gameEvent.timestamp === 'number' ? gameEvent.timestamp * 1000 : Date.now())
       })
-      setPhase(GamePhase.STACK_CALLED)
+      
+      // Only change phase if we're not in a special action phase
+      // During special actions, the phase change will come later via game_phase_changed event
+      if (currentPhase !== GamePhase.WAITING_FOR_SPECIAL_ACTION && 
+          currentPhase !== GamePhase.KING_VIEW_PHASE && 
+          currentPhase !== GamePhase.KING_SWAP_PHASE) {
+        setPhase(GamePhase.STACK_CALLED)
+      }
       break
     }
 

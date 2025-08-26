@@ -659,8 +659,10 @@ class CaboGame:
 
         # Check if we're in a special action phase
         if self.state.phase in [GamePhase.WAITING_FOR_SPECIAL_ACTION, GamePhase.KING_VIEW_PHASE, GamePhase.KING_SWAP_PHASE]:
-            # During special actions, just set the stack caller but don't change phase
+            # During special actions, record the stack caller but don't change phase
+            # The special action must complete first
             self.state.stack_caller = message.player_id
+            # Use standard stack_called event but phase doesn't change yet
             return {
                 "success": True,
                 "event": GameEvent("stack_called", {
