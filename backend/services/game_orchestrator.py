@@ -53,23 +53,24 @@ class GameOrchestrator:
         player_ids = [str(p.user_id) for p in players]
         player_names = [p.nickname for p in players]
 
-        # Checkpoint callback that actually works!
-        def checkpoint_callback():
-            asyncio.create_task(self._create_checkpoint_async(room_id))
-
         # Create game instance
-        game = CaboGame(
-            player_ids, 
-            player_names,
-            broadcast_callback=lambda e: None,  # Events go through stream
-            checkpoint_callback=checkpoint_callback
-        )
+        game = CaboGame(player_ids, player_names)
 
         # Save game to Redis
         await self.game_store.save_game(room_id, game, room.room_code)
         
-        # Create initial checkpoint
-        await self.checkpoint_manager.create_checkpoint(room_id, game, 0)
+        # Manually publish the initial game_started event
+        await self.stream_manager.publish_event(
+            room_id,
+            "game_started",
+            {
+                "phase": "setup",
+                "setup_time_seconds": 10
+            }
+        )
+        
+        # Create and broadcast initial checkpoint
+        await self._create_checkpoint_async(room_id)
 
         # Start processing messages
         self.processing_tasks[room_id] = asyncio.create_task(
@@ -89,7 +90,7 @@ class GameOrchestrator:
     async def process_game_messages(self, room_id: str):
         """Main game loop - processes messages from Redis queue"""
         logger.info(f"Starting message processor for room {room_id}")
-
+        
         # Load game ONCE at startup and keep it in memory
         initial_game_data = await self.game_store.load_game(room_id)
         if not initial_game_data:
@@ -143,6 +144,12 @@ class GameOrchestrator:
                                 event.event_type,
                                 event.data
                             )
+                        
+                        # Check if checkpoint is needed (after phase changes)
+                        if game.needs_checkpoint:
+                            game.needs_checkpoint = False  # Clear the flag
+                            # Pass the current game instance to ensure correct state
+                            await self._create_checkpoint_async(room_id, game)
 
                     # If no messages, wait before next iteration
                     if not messages:
@@ -160,14 +167,16 @@ class GameOrchestrator:
         finally:
             await self.end_game(room_id)
 
-    async def _create_checkpoint_async(self, room_id: str):
+    async def _create_checkpoint_async(self, room_id: str, game=None):
         """Create checkpoint when game requests it (phase changes)"""
         try:
-            game_data = await self.game_store.load_game(room_id)
-            if not game_data:
-                return
+            # If no game instance provided, load from Redis (for initial creation)
+            if game is None:
+                game_data = await self.game_store.load_game(room_id)
+                if not game_data:
+                    return
+                game, _ = game_data
             
-            game, _ = game_data
             current_seq = self.connection_manager.get_next_sequence(room_id)
             
             checkpoint = await self.checkpoint_manager.create_checkpoint(
@@ -200,13 +209,6 @@ class GameOrchestrator:
         # Handle non-game messages first
         msg_type = message.get("type")
 
-        # Handle ack_seq messages
-        if msg_type == "ack_seq":
-            seq_num = message.get("seq_num")
-            if seq_num is not None:
-                await self.redis.ack_sequence(room_id, session_id, seq_num)
-                await self.connection_manager.acknowledge_sequence(room_id, session_id, seq_num)
-            return
 
         # Handle get_session_info messages
         if msg_type == "get_session_info":
@@ -306,7 +308,12 @@ class GameOrchestrator:
         # Get latest checkpoint
         checkpoint = await self.checkpoint_manager.get_latest_checkpoint(room_id)
         if not checkpoint:
-            logger.error(f"No checkpoint for room {room_id}")
+            logger.warning(f"No checkpoint for room {room_id}, cannot handle reconnection")
+            # Send an error or empty ready signal
+            await websocket.send_json({
+                "type": "error",
+                "message": "No game state available for reconnection"
+            })
             return
         
         # Send checkpoint

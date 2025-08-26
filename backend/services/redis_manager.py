@@ -271,14 +271,8 @@ class RedisManager:
         await self.ensure_connected()
         key = f"game:{room_id}:viewed:{viewer_id}"
         members = await self._redis.smembers(key)
-
-        result = set()
-        for member in members:
-            if ':' in member:
-                owner_id, card_index = member.split(':', 1)
-                result.add((owner_id, int(card_index)))
-
-        return result
+        # Return raw strings, let the caller decide how to parse them
+        return members
 
     # Message Queue Operations
 
@@ -442,6 +436,27 @@ class RedisManager:
         await self.ensure_connected()
         key = f"game:{room_id}:meta"
         return await self._redis.exists(key) > 0
+
+    # Track which sessions have been announced to rooms (survives restarts)
+    async def mark_session_announced(self, room_id: str, session_id: str) -> None:
+        """Mark that a session has been announced to a room"""
+        await self.ensure_connected()
+        key = f"room:{room_id}:announced"
+        await self._redis.sadd(key, session_id)
+        # Expire after 24 hours (rooms shouldn't last that long)
+        await self._redis.expire(key, 86400)
+    
+    async def is_session_announced(self, room_id: str, session_id: str) -> bool:
+        """Check if a session has been announced to a room"""
+        await self.ensure_connected()
+        key = f"room:{room_id}:announced"
+        return await self._redis.sismember(key, session_id)
+    
+    async def clear_room_announced(self, room_id: str) -> None:
+        """Clear announced sessions for a room (when room is deleted)"""
+        await self.ensure_connected()
+        key = f"room:{room_id}:announced"
+        await self._redis.delete(key)
 
 
 # Global instance

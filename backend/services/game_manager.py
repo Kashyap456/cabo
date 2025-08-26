@@ -335,15 +335,14 @@ class GameState:
 
 
 class CaboGame:
-    def __init__(self, player_ids: List[str], player_names: List[str], broadcast_callback: Optional[Callable[[GameEvent], None]] = None, checkpoint_callback: Optional[Callable[[], None]] = None):
+    def __init__(self, player_ids: List[str], player_names: List[str]):
         self.game_id = str(uuid.uuid4())
         self.deck = Deck()
         self.discard_pile: List[Card] = []
         self.players: List[Player] = []
         self.state = GameState(GamePhase.SETUP, 0)
         self.message_queue: Queue[GameMessage] = Queue()
-        self.broadcast_callback = broadcast_callback
-        self.checkpoint_callback = checkpoint_callback
+        self.needs_checkpoint = False  # Flag for when checkpoint is needed
         # timeout_id -> expiry_time
         self.pending_timeouts: Dict[str, float] = {}
 
@@ -364,12 +363,8 @@ class CaboGame:
         # Schedule setup timeout (game stays in SETUP phase)
         self.state.setup_timer_id = self._schedule_timeout(
             SetupTimeoutMessage(), 10.0)  # 10 seconds for setup
-
-        self._broadcast_event(
-            "game_started", {
-                "phase": "setup",
-                "setup_time_seconds": 10
-            })
+        
+        # Note: game_started event should be published by the orchestrator after creation
 
     def _deal_initial_cards(self):
         """Deal 4 cards to each player"""
@@ -383,16 +378,9 @@ class CaboGame:
         """Check if Cabo has been called (final round has started)"""
         return self.state.cabo_caller is not None
 
-    def _broadcast_event(self, event_type: str, data: Dict[str, Any]):
-        """Broadcast an event to all clients"""
-        if self.broadcast_callback:
-            event = GameEvent(event_type, data)
-            self.broadcast_callback(event)
-
     def _trigger_checkpoint(self):
-        """Trigger a checkpoint creation"""
-        if self.checkpoint_callback:
-            self.checkpoint_callback()
+        """Mark that a checkpoint is needed"""
+        self.needs_checkpoint = True
 
     def _schedule_timeout(self, message: GameMessage, delay_seconds: float) -> str:
         """Schedule a timeout message to be added to queue after delay"""
@@ -450,14 +438,10 @@ class CaboGame:
                     if "event" in result:
                         event = result["event"]
                         events.append(event)
-                        # Actually broadcast the event
-                        self._broadcast_event(event.event_type, event.data)
                     # Support multiple events from a single handler
                     if "events" in result:
                         for event in result["events"]:
                             events.append(event)
-                            # Actually broadcast the event
-                            self._broadcast_event(event.event_type, event.data)
                     # Add any follow-up messages
                     if "next_messages" in result:
                         for next_msg in result["next_messages"]:
@@ -1285,6 +1269,10 @@ class CaboGame:
 
         # Clear initial card visibility (players can no longer see their initial cards)
         self.state.card_visibility.clear()
+        
+        # Clear any leftover state from setup
+        self.state.drawn_card = None
+        self.state.played_card = None
 
         # Choose starting player and transition to PLAYING
         self.state.current_player_index = random.randint(

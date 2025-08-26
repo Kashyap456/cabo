@@ -104,19 +104,28 @@ class ConnectionManager:
                 session_id, websocket, room_id, nickname, is_host
             )
             
-            # Send player_joined message to others
-            seq_num = self.get_next_sequence(room_id)
-            await self.broadcast_to_room(room_id, {
-                "type": "player_joined",
-                "seq_num": seq_num,
-                "player": {
-                    "id": session_id,
-                    "nickname": nickname,
-                    "isHost": is_host
-                }
-            }, exclude_session=session_id)
+            # Check if this session has been announced to the room before
+            already_announced = await self.redis.is_session_announced(room_id, session_id)
             
-            logger.info(f"Session {session_id} joined room {room_id}")
+            if not already_announced:
+                # First time this session connects to this room - announce them
+                seq_num = self.get_next_sequence(room_id)
+                await self.broadcast_to_room(room_id, {
+                    "type": "player_joined",
+                    "seq_num": seq_num,
+                    "player": {
+                        "id": session_id,
+                        "nickname": nickname,
+                        "isHost": is_host
+                    }
+                }, exclude_session=session_id)
+                
+                # Mark as announced in Redis
+                await self.redis.mark_session_announced(room_id, session_id)
+                logger.info(f"Session {session_id} joined room {room_id} (first time)")
+            else:
+                # Reconnection - don't announce again
+                logger.info(f"Session {session_id} reconnected to room {room_id}")
         
         return connection_id
     
@@ -234,11 +243,7 @@ class ConnectionManager:
         """Disconnect a session and clean up (legacy interface)."""
         connection_id = self.session_to_connection.get(session_id)
         if connection_id:
-            # Clean up sequencer tracking
-            conn_info = self.connections.get(connection_id)
-            if conn_info and conn_info.room_id:
-                self.sequencer.remove_client(conn_info.room_id, session_id)
-            
+            # No sequencer to clean up anymore
             await self.disconnect_connection(connection_id, close_websocket=False, enter_grace=True)
     
     async def disconnect_connection(self, connection_id: str, close_websocket: bool = False, 
@@ -634,9 +639,20 @@ class ConnectionManager:
             return conn_info and conn_info.state == 'active'
         return False
     
+    
+    async def cleanup_room_data(self, room_id: str):
+        """Clean up room data when room is deleted."""
+        # Clean up sequence tracking
+        if room_id in self.room_sequences:
+            del self.room_sequences[room_id]
+        # Clean up announced sessions in Redis
+        await self.redis.clear_room_announced(room_id)
+    
     def cleanup_room_sequencer(self, room_id: str):
-        """Clean up sequencer data when room is deleted."""
-        self.sequencer.cleanup_room(room_id)
+        """Legacy method for backward compatibility."""
+        # Clean up sequence tracking
+        if room_id in self.room_sequences:
+            del self.room_sequences[room_id]
     
     async def cleanup_all(self) -> None:
         """Clean up all connections (for shutdown)."""

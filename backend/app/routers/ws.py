@@ -82,9 +82,10 @@ async def websocket_endpoint(
 ):
     """WebSocket endpoint for real-time game communication"""
     from app.core.database import async_session_maker
-    
-    logger.info(f"New WebSocket connection from {websocket.client.host}:{websocket.client.port}")
-    
+
+    logger.info(
+        f"New WebSocket connection from {websocket.client.host}:{websocket.client.port}")
+
     session = None
     session_id = None
     connection_id = None
@@ -102,7 +103,8 @@ async def websocket_endpoint(
 
         # Accept connection
         await websocket.accept()
-        logger.info(f"WebSocket connection accepted for session {session_id} from {websocket.client}")
+        logger.info(
+            f"WebSocket connection accepted for session {session_id} from {websocket.client}")
 
         # Check if session is in a room and add to room connections (with new DB connection)
         async with async_session_maker() as db:
@@ -115,16 +117,22 @@ async def websocket_endpoint(
                 if room:
                     room_id = str(room.room_id)  # Cache room ID
                     is_host = str(room.host_session_id) == session_id
-                    # Always treat as new connection here (reconnection is handled internally)
-                    is_reconnection = False
+                    
+                    # Check if this session has been announced before (using Redis)
+                    is_reconnection = await connection_manager.redis.is_session_announced(room_id, session_id)
+                    
                     # Add to room connections and get connection ID
                     connection_id = await connection_manager.add_to_room(session_id, room_id, websocket, session.nickname, is_host, is_reconnection)
 
                     # Handle room state based on phase
                     if room.phase == RoomPhase.WAITING:
+                        # For waiting rooms, just send current state
                         await send_room_state(room, db)
+                        # No checkpoint needed for waiting rooms
                     elif room.phase == RoomPhase.IN_GAME:
-                        # Handle reconnection with checkpoint + replay
+                        if not await game_orchestrator.is_game_active_async(room_id):
+                            await websocket.close(code=4004, reason="Game not active")
+                            return
                         await game_orchestrator.handle_player_reconnection(
                             room_id, session_id, websocket
                         )
@@ -215,21 +223,6 @@ async def handle_lobby_message(websocket: WebSocket, session: UserSession, messa
             "nickname": session.nickname,
             "room_id": str(current_membership.room_id) if current_membership else None
         })
-    elif msg_type == "ack_seq":
-        # Handle sequence acknowledgment
-        seq_num = message.get("seq_num")
-        if seq_num is not None:
-            # Get user's room
-            membership_result = await db.execute(
-                select(UserToRoom).where(UserToRoom.user_id == session.user_id)
-            )
-            current_membership = membership_result.scalar_one_or_none()
-            if current_membership:
-                await connection_manager.acknowledge_sequence(
-                    str(current_membership.room_id),
-                    str(session.user_id),
-                    seq_num
-                )
     else:
         await websocket.send_json({
             "type": "error",

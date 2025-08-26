@@ -38,8 +38,8 @@ class StreamManager:
             {"event": json.dumps(event_data)}
         )
         
-        logger.debug(f"Published {event_type} to room {room_id} stream at {event_id.decode()}")
-        return event_id.decode()
+        logger.debug(f"Published {event_type} to room {room_id} stream at {event_id}")
+        return event_id
     
     async def start_broadcast(self, room_id: str, connection_manager, from_position: str = "$"):
         """Start broadcasting events from stream to all room members"""
@@ -74,12 +74,26 @@ class StreamManager:
                     for stream_name, events in result:
                         for msg_id, data in events:
                             try:
-                                msg_id_str = msg_id.decode()
-                                event_json = data.get(b'event', b'{}')
-                                event_data = json.loads(event_json)
+                                if not data:
+                                    continue
+                                
+                                # Since decode_responses=True, we get strings not bytes
+                                event_json = data.get('event', '{}')
+                                
+                                if event_json == '{}':
+                                    continue
+                                    
+                                try:
+                                    event_data = json.loads(event_json)
+                                except json.JSONDecodeError:
+                                    logger.error(f"Failed to parse event JSON: {event_json[:100]}")
+                                    continue
+                                
+                                if not event_data or not event_data.get('event_type'):
+                                    continue
                                 
                                 # Add stream position to event
-                                event_data['stream_id'] = msg_id_str
+                                event_data['stream_id'] = msg_id
                                 
                                 # Get next sequence number
                                 seq_num = connection_manager.get_next_sequence(room_id)
@@ -94,12 +108,12 @@ class StreamManager:
                                     }
                                 )
                                 
-                                last_id = msg_id_str
+                                last_id = msg_id
                                 self.broadcast_positions[room_id] = last_id
                                 
                             except Exception as e:
                                 logger.error(f"Failed to broadcast event {msg_id}: {e}")
-                                last_id = msg_id.decode()
+                                last_id = msg_id
                 
                 except Exception as e:
                     logger.error(f"Error in broadcast loop for {room_id}: {e}")
@@ -152,8 +166,9 @@ class StreamManager:
         events = []
         for msg_id, data in result:
             try:
-                event_data = json.loads(data.get(b'event', b'{}'))
-                events.append((msg_id.decode(), event_data))
+                # Since decode_responses=True, we get strings not bytes
+                event_data = json.loads(data.get('event', '{}'))
+                events.append((msg_id, event_data))
             except Exception as e:
                 logger.error(f"Failed to parse event {msg_id}: {e}")
         

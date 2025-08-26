@@ -102,12 +102,12 @@ class RedisGameStore:
                         await pipe.hset(f"game:{room_id}:turn", mapping=turn_data)
                         await pipe.expire(f"game:{room_id}:turn", 86400)
                     
-                    # Save temporarily viewed cards
-                    for viewer_id, viewed_set in game.state.temporarily_viewed_cards.items():
+                    # Save card visibility
+                    for viewer_id, visible_cards in game.state.card_visibility.items():
                         await pipe.delete(f"game:{room_id}:viewed:{viewer_id}")
-                        for owner_id, card_index in viewed_set:
+                        for target_id, card_index in visible_cards:
                             await pipe.sadd(f"game:{room_id}:viewed:{viewer_id}", 
-                                          f"{owner_id}:{card_index}")
+                                          f"{target_id}:{card_index}")
                         await pipe.expire(f"game:{room_id}:viewed:{viewer_id}", 86400)
                     
                     # Execute pipeline
@@ -119,9 +119,7 @@ class RedisGameStore:
             logger.error(f"Error saving game state for room {room_id}: {e}")
             raise
     
-    async def load_game(self, room_id: str, 
-                       broadcast_callback: Optional[callable] = None,
-                       checkpoint_callback: Optional[callable] = None) -> Optional[Tuple[CaboGame, str]]:
+    async def load_game(self, room_id: str) -> Optional[Tuple[CaboGame, str]]:
         """Load game state from Redis"""
         try:
             # Check if game exists
@@ -144,12 +142,7 @@ class RedisGameStore:
             player_ids = [p['player_id'] for p in players_data]
             player_names = [p['name'] for p in players_data]
             
-            game = CaboGame(
-                player_ids=player_ids,
-                player_names=player_names,
-                broadcast_callback=broadcast_callback or (lambda e: None),
-                checkpoint_callback=checkpoint_callback or (lambda: None)
-            )
+            game = CaboGame(player_ids, player_names)
             
             # Restore game ID
             game.game_id = meta.get('game_id', game.game_id)
@@ -193,12 +186,21 @@ class RedisGameStore:
                 game.state.setup_timer_id = turn_data.get('setup_timer_id') or None
                 game.state.cabo_caller = turn_data.get('cabo_caller') or None
             
-            # Restore temporarily viewed cards
-            game.state.temporarily_viewed_cards = defaultdict(set)
+            # Restore card visibility
+            game.state.card_visibility = defaultdict(list)
             for player_id in player_ids:
                 viewed_cards = await self.redis.get_viewed_cards(room_id, player_id)
                 if viewed_cards:
-                    game.state.temporarily_viewed_cards[player_id] = viewed_cards
+                    # Convert set of "target_id:card_index" strings to list of tuples
+                    for card_str in viewed_cards:
+                        # card_str might be bytes or string from Redis
+                        if isinstance(card_str, bytes):
+                            card_str = card_str.decode('utf-8')
+                        if ':' in card_str:
+                            target_id, card_index = card_str.split(':')
+                            game.state.card_visibility[player_id].append((target_id, int(card_index)))
+                        else:
+                            logger.warning(f"Invalid card visibility format: {card_str}")
             
             # Restore pending timeouts
             if 'pending_timeouts' in meta:

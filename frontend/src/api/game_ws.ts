@@ -13,9 +13,9 @@ export interface WebSocketMessage {
   [key: string]: any
 }
 
-export interface RoomWaitingStateMessage extends WebSocketMessage {
-  type: 'room_waiting_state'
-  seq_num: number
+// Room update message (sent when joining waiting room)
+export interface RoomUpdateMessage extends WebSocketMessage {
+  type: 'room_update'
   room: {
     room_id: string
     room_code: string
@@ -28,6 +28,8 @@ export interface RoomWaitingStateMessage extends WebSocketMessage {
     }>
   }
 }
+
+// RoomWaitingStateMessage removed - replaced by RoomUpdateMessage
 
 export interface GameCheckpointMessage extends WebSocketMessage {
   type: 'game_checkpoint'
@@ -79,56 +81,7 @@ export interface GameCheckpointMessage extends WebSocketMessage {
   timestamp: string
 }
 
-// Keep old message type for backward compatibility during transition
-export interface RoomPlayingStateMessage extends WebSocketMessage {
-  type: 'room_in_game_state'
-  seq_num: number
-  room: {
-    room_id: string
-    room_code: string
-  }
-  game: {
-    current_player_id: string
-    phase: string
-    turn_number: number
-    players: Array<{
-      id: string
-      nickname: string
-      cards: Array<{
-        id: string
-        rank: number | '?'
-        suit: string | '?' | null
-        isTemporarilyViewed?: boolean
-      }>
-      has_called_cabo: boolean
-    }>
-    top_discard_card: {
-      id: string
-      rank: number | '?'
-      suit: string | '?' | null
-      isTemporarilyViewed?: boolean
-    } | null
-    played_card: {
-      id: string
-      rank: number | '?'
-      suit: string | '?' | null
-      isTemporarilyViewed?: boolean
-    } | null
-    drawn_card: {
-      id: string
-      rank: number | '?'
-      suit: string | '?' | null
-      isTemporarilyViewed?: boolean
-    } | null
-    special_action: {
-      type: string
-      player_id: string
-    } | null
-    stack_caller: string | null
-    cabo_called_by: string | null
-    final_round_started: boolean
-  }
-}
+// RoomPlayingStateMessage removed - replaced by GameCheckpointMessage
 
 export interface PlayerJoinedMessage extends WebSocketMessage {
   type: 'player_joined'
@@ -148,7 +101,9 @@ export interface PlayerLeftMessage extends WebSocketMessage {
 
 export interface ReadyMessage extends WebSocketMessage {
   type: 'ready'
-  current_seq: number
+  checkpoint_id?: string  // Present for game reconnection
+  events_replayed?: number  // Present for game reconnection
+  current_seq?: number  // Legacy field
 }
 
 export interface SessionInfoMessage extends WebSocketMessage {
@@ -160,9 +115,11 @@ export interface SessionInfoMessage extends WebSocketMessage {
 
 export interface GameEventMessage extends WebSocketMessage {
   type: 'game_event'
-  seq_num: number
+  seq_num?: number
+  stream_id?: string  // Position in Redis stream
   event_type: string
   data: any
+  timestamp?: string
 }
 
 const handleGameEvent = (gameEvent: GameEventMessage) => {
@@ -618,6 +575,93 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       // Could show winner announcement
       break
     }
+    
+    case 'checkpoint_created': {
+      console.log('Received checkpoint event')
+      // The checkpoint data is the entire event data
+      const checkpoint = gameEvent.data
+      
+      // Process it like we do for game_checkpoint messages
+      if (checkpoint.type === 'game_checkpoint' && checkpoint.game_state) {
+        // Apply the checkpoint state (same logic as game_checkpoint message)
+        const currentUserId = useAuthStore.getState().sessionId
+        const gameState = checkpoint.game_state
+        
+        // Process players with visibility filtering
+        const players = gameState.players.map(player => {
+          const cards = player.cards.map((card, index) => {
+            // Check if current user can see this card
+            const visibleCards = gameState.card_visibility?.[currentUserId] || []
+            const canSee = visibleCards.some(([targetId, cardIdx]) => 
+              targetId === player.id && cardIdx === index
+            )
+            
+            // During setup phase, players can see their first 2 cards
+            const isOwnCard = player.id === currentUserId
+            const isSetupPhase = gameState.phase === 'setup'
+            const isSetupVisible = isOwnCard && isSetupPhase && index < 2
+            
+            return {
+              id: card.id,
+              rank: (canSee || isSetupVisible) ? card.rank : ('?' as const),
+              suit: (canSee || isSetupVisible) ? card.suit : ('?' as const),
+              isTemporarilyViewed: canSee || isSetupVisible
+            }
+          })
+          
+          return {
+            id: player.id,
+            nickname: player.name,
+            cards,
+            hasCalledCabo: player.has_called_cabo
+          }
+        })
+        
+        // Apply game state
+        setPlayers(players)
+        setCurrentPlayer(gameState.current_player || '')
+        setPhase(gameState.phase as GamePhase)
+        
+        // Set drawn card if exists and belongs to current player
+        if (gameState.drawn_card && gameState.current_player === currentUserId) {
+          setDrawnCard(convertCard(gameState.drawn_card))
+        } else {
+          setDrawnCard(null)
+        }
+        
+        // Set discard pile
+        if (gameState.discard_top) {
+          addCardToDiscard(convertCard(gameState.discard_top))
+        }
+        
+        // Set special action
+        if (gameState.special_action_player) {
+          setSpecialAction({
+            type: gameState.special_action_type || '',
+            playerId: gameState.special_action_player
+          })
+        } else {
+          setSpecialAction(null)
+        }
+        
+        // Set stack caller
+        if (gameState.stack_caller) {
+          setStackCaller(gameState.stack_caller)
+        } else {
+          setStackCaller(null)
+        }
+        
+        // Set cabo caller
+        if (gameState.cabo_caller) {
+          setCalledCabo(gameState.cabo_caller, true)
+        }
+        
+        // Update room state
+        // Update room phase using the room store
+        useRoomStore.getState().setPhase(RoomPhase.IN_GAME)
+      }
+      break
+    }
 
     default: {
       console.warn('Unknown game event type:', gameEvent.event_type)
@@ -730,36 +774,27 @@ export const useGameWebSocket = () => {
   const handleMessage = useCallback((message: WebSocketMessage) => {
     console.log('Received WebSocket message:', message.type)
     
-    // Update sequence number if present and send ack immediately
+    // Update sequence number if present
     if (message.seq_num !== undefined) {
       setCurrentSeq(message.seq_num)
-      
-      // Send acknowledgment for sequenced messages - do this first to avoid blocking
-      if (readyState === ReadyState.OPEN) {
-        try {
-          sendMessage(JSON.stringify({
-            type: 'ack_seq',
-            seq_num: message.seq_num
-          }))
-        } catch (error) {
-          console.error('Failed to send ack:', error)
-        }
-      }
     }
     
     switch (message.type) {
-      case 'room_waiting_state': {
-        const waitingState = message as RoomWaitingStateMessage
-        console.log('Received room waiting state checkpoint')
+      case 'room_update': {
+        const roomUpdate = message as RoomUpdateMessage
+        console.log('Received room update')
         
-        // Apply checkpoint state
-        const players = waitingState.room.players.map(p => ({
+        // Apply room state
+        const players = roomUpdate.room.players.map(p => ({
           id: p.id,
           nickname: p.nickname,
           isHost: p.isHost
         }))
         setPlayers(players)
         setPhase(RoomPhase.WAITING)
+        
+        // Mark as ready since this is our initial state
+        setIsReady(true)
         break
       }
       
@@ -775,7 +810,7 @@ export const useGameWebSocket = () => {
         const players = gameState.players.map(player => {
           const cards = player.cards.map((card, index) => {
             // Check if current user can see this card
-            const visibleCards = gameState.card_visibility[currentUserId] || []
+            const visibleCards = gameState.card_visibility?.[currentUserId] || []
             const canSee = visibleCards.some(([targetId, cardIdx]) => 
               targetId === player.id && cardIdx === index
             )
@@ -841,99 +876,24 @@ export const useGameWebSocket = () => {
         }
         
         // Update room state
-        setRoomPhase(RoomPhase.IN_GAME)
-        
-        // Send acknowledgment
-        sendMessage({
-          type: 'ack_seq',
-          seq_num: checkpoint.sequence_num
-        })
+        // Update room phase using the room store
+        useRoomStore.getState().setPhase(RoomPhase.IN_GAME)
         
         break
       }
       
-      case 'room_in_game_state': {
-        const playingState = message as RoomPlayingStateMessage
-        console.log('Received room playing state checkpoint')
-        
-        // Apply room state
-        setPhase(RoomPhase.IN_GAME)
-        
-        // Convert game cards to frontend format
-        const convertCard = (card: any): GameCard => ({
-          id: card.id,
-          rank: card.rank,
-          suit: card.suit,
-          isTemporarilyViewed: card.isTemporarilyViewed || false
-        })
-        
-        // Reset game state first to clear any stale data
-        const { resetGameState, setDiscardPile } = useGamePlayStore.getState()
-        resetGameState()
-        
-        // Apply game state atomically
-        const gamePhase = playingState.game.phase as GamePhase
-        
-        const gamePlayers = playingState.game.players.map(p => ({
-          id: p.id,
-          nickname: p.nickname,
-          cards: p.cards.map(convertCard),
-          hasCalledCabo: p.has_called_cabo
-        }))
-        
-        // Update all game state at once to avoid partial updates
-        setGamePlayers(gamePlayers)
-        setCurrentPlayer(playingState.game.current_player_id)
-        setGamePhase(gamePhase)
-        
-        // Set discard pile with only the top card if it exists
-        if (playingState.game.top_discard_card) {
-          setDiscardPile([convertCard(playingState.game.top_discard_card)])
-        }
-        
-        // Set drawn card if it exists and current player matches
-        const currentUserId = useAuthStore.getState().sessionId
-        if (playingState.game.drawn_card && playingState.game.current_player_id === currentUserId) {
-          // Handle both object and string formats for drawn card
-          if (typeof playingState.game.drawn_card === 'string') {
-            const parsedCard = parseCardString(playingState.game.drawn_card)
-            setDrawnCard({ ...parsedCard, id: `drawn_${playingState.game.current_player_id}_${Date.now()}`, isTemporarilyViewed: true })
-          } else {
-            // Ensure drawn card has isTemporarilyViewed set to true
-            const drawnCard = convertCard(playingState.game.drawn_card)
-            setDrawnCard({ ...drawnCard, id: `drawn_${playingState.game.current_player_id}_${Date.now()}`, isTemporarilyViewed: true })
-          }
-        } else {
-          setDrawnCard(null)
-        }
-        
-        // Set special action if active
-        if (playingState.game.special_action) {
-          setSpecialAction({
-            type: playingState.game.special_action.type as any,
-            playerId: playingState.game.special_action.player_id,
-            isComplete: false
-          })
-        }
-        
-        // Set stack caller if exists
-        if (playingState.game.stack_caller) {
-          setStackCaller({
-            playerId: playingState.game.stack_caller,
-            nickname: gamePlayers.find(p => p.id === playingState.game.stack_caller)?.nickname || 'Unknown',
-            timestamp: Date.now()
-          })
-        } else {
-          // Clear stack caller if not in checkpoint
-          setStackCaller(null)
-        }
-        
-        break
-      }
+      // room_in_game_state removed - handled by game_checkpoint above
       
       case 'game_event': {
         const gameEvent = message as GameEventMessage
         console.log('Received game event:', gameEvent.event_type, gameEvent.data)
+        console.log('Full game event message:', JSON.stringify(gameEvent, null, 2))
+        
+        // Check if the event has the expected structure
+        if (!gameEvent.event_type) {
+          console.error('Game event missing event_type:', gameEvent)
+          break
+        }
         
         try {
           handleGameEvent(gameEvent)
