@@ -134,7 +134,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     setCalledCabo,
     getPlayerById,
     updatePlayerCards,
-    setPlayers
+    setPlayers,
+    addVisibleCard
   } = useGamePlayStore.getState()
 
   const convertCard = (card: any): GameCard => ({
@@ -592,9 +593,15 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
           const cards = player.cards.map((card, index) => {
             // Check if current user can see this card
             const visibleCards = gameState.card_visibility?.[currentUserId] || []
-            const canSee = visibleCards.some(([targetId, cardIdx]) => 
-              targetId === player.id && cardIdx === index
-            )
+            const canSee = visibleCards.some((visibility) => {
+              // Handle both array and object formats
+              if (Array.isArray(visibility)) {
+                const [targetId, cardIdx] = visibility
+                return targetId === player.id && cardIdx === index
+              } else {
+                return visibility.player_id === player.id && visibility.card_index === index
+              }
+            })
             
             // During setup phase, players can see their first 2 cards
             const isOwnCard = player.id === currentUserId
@@ -811,9 +818,15 @@ export const useGameWebSocket = () => {
           const cards = player.cards.map((card, index) => {
             // Check if current user can see this card
             const visibleCards = gameState.card_visibility?.[currentUserId] || []
-            const canSee = visibleCards.some(([targetId, cardIdx]) => 
-              targetId === player.id && cardIdx === index
-            )
+            const canSee = visibleCards.some((visibility) => {
+              // Handle both array and object formats
+              if (Array.isArray(visibility)) {
+                const [targetId, cardIdx] = visibility
+                return targetId === player.id && cardIdx === index
+              } else {
+                return visibility.player_id === player.id && visibility.card_index === index
+              }
+            })
             
             // During setup phase, players can see their first 2 cards
             const isOwnCard = player.id === currentUserId
