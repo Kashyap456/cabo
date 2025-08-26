@@ -742,6 +742,8 @@ class CaboGame:
                     "event": GameEvent("stack_success", {
                         "type": "self_stack",
                         "player": player.name,
+                        "player_id": player.player_id,
+                        "card_index": message.card_index,
                         "discarded_card": str(stack_card)
                     }),
                     "next_messages": next_messages
@@ -760,7 +762,10 @@ class CaboGame:
                     "event": GameEvent("stack_success", {
                         "type": "opponent_stack",
                         "player": player.name,
+                        "player_id": player.player_id,
+                        "card_index": message.card_index,
                         "target": target_player.name,
+                        "target_id": target_player.player_id,
                         "given_card": str(stack_card)
                     }),
                     "next_messages": next_messages
@@ -775,8 +780,9 @@ class CaboGame:
                 "success": True,
                 "event": GameEvent("stack_failed", {
                     "player": player.name,
+                    "player_id": player.player_id,
                     "attempted_card": str(stack_card),
-                    "penalty": drawn_card is not None
+                    "penalty_card": str(drawn_card) if drawn_card else None
                 }),
                 "next_messages": next_messages
             }
@@ -799,7 +805,8 @@ class CaboGame:
             "success": True,
             "event": GameEvent("stack_timeout", {
                 "player": stack_caller.name if stack_caller else "Unknown",
-                "penalty": drawn_card is not None if 'drawn_card' in locals() else False
+                "player_id": self.state.stack_caller,
+                "penalty_card": str(drawn_card) if 'drawn_card' in locals() and drawn_card else None
             }),
             "next_messages": [NextTurnMessage()]
         }

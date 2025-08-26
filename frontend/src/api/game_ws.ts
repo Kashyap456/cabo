@@ -345,6 +345,39 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'stack_success': {
       console.log('Stack successful:', gameEvent.data.type, 'by', gameEvent.data.player)
+      
+      // Handle card updates based on stack type
+      if (gameEvent.data.type === 'self_stack') {
+        // Player discarded their own card
+        const player = getPlayerById(gameEvent.data.player_id)
+        if (player && gameEvent.data.card_index !== undefined) {
+          // Remove the card at the specified index
+          const updatedCards = player.cards.filter((_, index) => index !== gameEvent.data.card_index)
+          updatePlayerCards(gameEvent.data.player_id, updatedCards)
+        }
+      } else if (gameEvent.data.type === 'opponent_stack') {
+        // Player removed their card and gave it to opponent
+        const player = getPlayerById(gameEvent.data.player_id)
+        const target = getPlayerById(gameEvent.data.target_id)
+        
+        if (player && gameEvent.data.card_index !== undefined) {
+          // Remove card from player
+          const updatedPlayerCards = player.cards.filter((_, index) => index !== gameEvent.data.card_index)
+          updatePlayerCards(gameEvent.data.player_id, updatedPlayerCards)
+        }
+        
+        if (target && gameEvent.data.given_card) {
+          // Add card to target (create unknown card since we don't know the details)
+          const newCard = {
+            id: `${gameEvent.data.target_id}_${target.cards.length}_${Date.now()}`,
+            rank: '?',
+            suit: '?'
+          } as GameCard
+          const updatedTargetCards = [...target.cards, newCard]
+          updatePlayerCards(gameEvent.data.target_id, updatedTargetCards)
+        }
+      }
+      
       // Clear stack caller and continue game
       clearStackCaller()
       break
@@ -352,6 +385,20 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'stack_failed': {
       console.log('Stack failed by:', gameEvent.data.player)
+      
+      // Player drew a penalty card
+      const player = getPlayerById(gameEvent.data.player_id)
+      if (player && gameEvent.data.penalty_card) {
+        // Add the penalty card as an unknown card
+        const penaltyCard = {
+          id: `${gameEvent.data.player_id}_${player.cards.length}_${Date.now()}`,
+          rank: '?',
+          suit: '?'
+        } as GameCard
+        const updatedCards = [...player.cards, penaltyCard]
+        updatePlayerCards(gameEvent.data.player_id, updatedCards)
+      }
+      
       // Clear stack caller and continue game
       clearStackCaller()
       break
@@ -359,6 +406,20 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'stack_timeout': {
       console.log('Stack timed out for:', gameEvent.data.player)
+      
+      // Player who timed out gets a penalty card
+      const player = getPlayerById(gameEvent.data.player_id)
+      if (player && gameEvent.data.penalty_card) {
+        // Add the penalty card as an unknown card
+        const penaltyCard = {
+          id: `${gameEvent.data.player_id}_${player.cards.length}_${Date.now()}`,
+          rank: '?',
+          suit: '?'
+        } as GameCard
+        const updatedCards = [...player.cards, penaltyCard]
+        updatePlayerCards(gameEvent.data.player_id, updatedCards)
+      }
+      
       clearStackCaller()
       break
     }
