@@ -1,3 +1,5 @@
+from services.checkpoint_manager import CheckpointManager
+from services.stream_manager import StreamManager
 import asyncio
 import logging
 import time
@@ -21,10 +23,6 @@ from app.models import GameRoom, UserSession
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
-
-
-from services.stream_manager import StreamManager
-from services.checkpoint_manager import CheckpointManager
 
 
 class GameOrchestrator:
@@ -58,7 +56,7 @@ class GameOrchestrator:
 
         # Save game to Redis
         await self.game_store.save_game(room_id, game, room.room_code)
-        
+
         # Manually publish the initial game_started event
         await self.stream_manager.publish_event(
             room_id,
@@ -68,7 +66,7 @@ class GameOrchestrator:
                 "setup_time_seconds": 10
             }
         )
-        
+
         # Create and broadcast initial checkpoint so clients have game state
         await self._create_checkpoint_async(room_id, broadcast=True)
 
@@ -76,10 +74,10 @@ class GameOrchestrator:
         self.processing_tasks[room_id] = asyncio.create_task(
             self.process_game_messages(room_id)
         )
-        
+
         # Start broadcasting from stream
         await self.stream_manager.start_broadcast(
-            room_id, 
+            room_id,
             self.connection_manager,
             from_position="0"  # Start from beginning for new game
         )
@@ -90,13 +88,13 @@ class GameOrchestrator:
     async def process_game_messages(self, room_id: str):
         """Main game loop - processes messages from Redis queue"""
         logger.info(f"Starting message processor for room {room_id}")
-        
+
         # Load game ONCE at startup and keep it in memory
         initial_game_data = await self.game_store.load_game(room_id)
         if not initial_game_data:
             logger.error(f"Failed to load initial game for room {room_id}")
             return
-        
+
         game, room_code = initial_game_data
 
         try:
@@ -129,9 +127,10 @@ class GameOrchestrator:
 
                     # Process all messages and check timeouts
                     events = game.process_messages()
-                    
+
                     if events:
-                        logger.info(f"Generated {len(events)} events in room {room_id}: {[e.event_type for e in events]}")
+                        logger.info(
+                            f"Generated {len(events)} events in room {room_id}: {[e.event_type for e in events]}")
 
                     # Save and publish if there were events or messages to process
                     if events or messages:
@@ -144,7 +143,7 @@ class GameOrchestrator:
                                 event.event_type,
                                 event.data
                             )
-                        
+
                         # Always create checkpoint after processing messages
                         # This ensures reconnecting players get the latest state
                         await self._create_checkpoint_async(room_id, game)
@@ -174,23 +173,24 @@ class GameOrchestrator:
                 if not game_data:
                     return
                 game, _ = game_data
-            
+
             current_seq = self.connection_manager.get_next_sequence(room_id)
-            
+
             checkpoint = await self.checkpoint_manager.create_checkpoint(
                 room_id, game, current_seq
             )
-            
+
             # Only broadcast initial checkpoint or when explicitly requested
             if broadcast:
                 await self.stream_manager.publish_event(
                     room_id,
-                    "checkpoint_created", 
+                    "checkpoint_created",
                     checkpoint.to_dict()
                 )
-            
-            logger.info(f"Created checkpoint for room {room_id} at phase {game.state.phase.value}")
-            
+
+            logger.info(
+                f"Created checkpoint for room {room_id} at phase {game.state.phase.value}")
+
         except Exception as e:
             logger.error(f"Failed to create checkpoint: {e}")
 
@@ -207,7 +207,6 @@ class GameOrchestrator:
 
         # Handle non-game messages first
         msg_type = message.get("type")
-
 
         # Handle get_session_info messages
         if msg_type == "get_session_info":
@@ -295,41 +294,42 @@ class GameOrchestrator:
             logger.error(f"Error deserializing message: {e}")
             return None
 
-
     async def handle_player_reconnection(
-        self, 
-        room_id: str, 
+        self,
+        room_id: str,
         session_id: str,
         websocket
     ):
         """Handle reconnecting player with checkpoint + replay"""
-        
+
         # Get latest checkpoint
         checkpoint = await self.checkpoint_manager.get_latest_checkpoint(room_id)
+        print(f"Checkpoint: {checkpoint}")
         if not checkpoint:
-            logger.warning(f"No checkpoint for room {room_id}, cannot handle reconnection")
+            logger.warning(
+                f"No checkpoint for room {room_id}, cannot handle reconnection")
             # Send an error or empty ready signal
             await websocket.send_json({
                 "type": "error",
                 "message": "No game state available for reconnection"
             })
             return
-        
+
         # Send checkpoint
         await websocket.send_json(checkpoint.to_dict())
-        
+
         # Get player's last position
         last_position = await self.stream_manager.get_player_position(room_id, session_id)
-        
+
         # Use checkpoint position if player has no recorded position
         start_position = last_position or checkpoint.stream_position
-        
+
         # Get missed events
         missed_events = await self.stream_manager.get_events_since(
             room_id,
             start_position
         )
-        
+
         # Send missed events with sequence numbers
         for stream_id, event_data in missed_events:
             seq_num = self.connection_manager.get_next_sequence(room_id)
@@ -339,19 +339,18 @@ class GameOrchestrator:
                 "seq_num": seq_num,
                 **event_data
             })
-        
+
         # Send ready signal
         await websocket.send_json({
             "type": "ready",
             "checkpoint_id": checkpoint.checkpoint_id,
             "events_replayed": len(missed_events)
         })
-        
+
         logger.info(
             f"Reconnected {session_id}: checkpoint {checkpoint.checkpoint_id}, "
             f"replayed {len(missed_events)} events"
         )
-
 
     async def end_game(self, room_id: str):
         """Clean up game resources"""
@@ -367,7 +366,7 @@ class GameOrchestrator:
 
         # Clean up Redis data
         await self.redis.cleanup_game(room_id)
-        
+
         # Clean up stream and checkpoints
         await self.stream_manager.cleanup_stream(room_id)
         await self.checkpoint_manager.cleanup_checkpoints(room_id)
@@ -428,11 +427,11 @@ class GameOrchestrator:
                 orchestrator.processing_tasks[room_id] = asyncio.create_task(
                     orchestrator.process_game_messages(room_id)
                 )
-                
+
                 # Start broadcasting from last checkpoint
                 checkpoint = await orchestrator.checkpoint_manager.get_latest_checkpoint(room_id)
                 from_position = checkpoint.stream_position if checkpoint else "0"
-                
+
                 await orchestrator.stream_manager.start_broadcast(
                     room_id,
                     connection_manager,

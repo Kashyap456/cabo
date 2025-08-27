@@ -33,6 +33,42 @@ class RedisGameStore:
         suit = Suit(card_data["suit"]) if card_data.get("suit") else None
         return Card(rank, suit)
     
+    def _heal_game_state(self, game: CaboGame) -> None:
+        """Heal any inconsistent state in the loaded game"""
+        from services.game_manager import GamePhase
+        phase = game.state.phase
+        
+        # Fix inconsistent draw_phase state
+        if phase == GamePhase.DRAW_PHASE:
+            if game.state.drawn_card:
+                logger.warning(
+                    f"Healing game state: Clearing drawn_card in draw_phase for game {game.game_id}"
+                )
+                game.state.drawn_card = None
+            if game.state.played_card:
+                logger.warning(
+                    f"Healing game state: Clearing played_card in draw_phase for game {game.game_id}"
+                )
+                game.state.played_card = None
+                
+        # Fix King phases - ensure no drawn_card exists  
+        if phase in [GamePhase.KING_VIEW_PHASE, GamePhase.KING_SWAP_PHASE]:
+            if game.state.drawn_card:
+                logger.warning(
+                    f"Healing game state: Clearing drawn_card in {phase.value} for game {game.game_id}"
+                )
+                game.state.drawn_card = None
+                
+        # Clear special action state if not in an action phase
+        if phase not in [GamePhase.WAITING_FOR_SPECIAL_ACTION, GamePhase.KING_VIEW_PHASE, GamePhase.KING_SWAP_PHASE]:
+            if game.state.special_action_player:
+                logger.warning(
+                    f"Healing game state: Clearing special_action_player in {phase.value} for game {game.game_id}"
+                )
+                game.state.special_action_player = None
+                game.state.special_action_type = None
+                game.state.special_action_timer_id = None
+    
     async def save_game(self, room_id: str, game: CaboGame, room_code: str) -> None:
         """Save complete game state to Redis"""
         try:
@@ -201,6 +237,9 @@ class RedisGameStore:
                             game.state.card_visibility[player_id].append((target_id, int(card_index)))
                         else:
                             logger.warning(f"Invalid card visibility format: {card_str}")
+            
+            # Heal any inconsistent state before returning
+            self._heal_game_state(game)
             
             # Restore pending timeouts
             if 'pending_timeouts' in meta:

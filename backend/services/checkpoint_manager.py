@@ -56,6 +56,19 @@ class CheckpointManager:
         # Get complete game state with visibility map
         game_state = game.get_complete_game_state()
         
+        # Validate state consistency before saving
+        phase = game_state.get('phase', '')
+        if phase == 'draw_phase' and game_state.get('drawn_card'):
+            logger.error(
+                f"INCONSISTENT STATE: Creating checkpoint with drawn_card in draw_phase! "
+                f"Room: {room_id}, Current player: {game_state.get('current_player')}"
+            )
+        if phase in ['king_view_phase', 'king_swap_phase'] and game_state.get('drawn_card'):
+            logger.error(
+                f"INCONSISTENT STATE: Creating checkpoint with drawn_card in {phase}! "
+                f"Room: {room_id}"
+            )
+        
         checkpoint = GameCheckpoint(
             checkpoint_id=f"{room_id}:{sequence_num}:{datetime.utcnow().timestamp()}",
             room_id=room_id,
@@ -86,8 +99,43 @@ class CheckpointManager:
         
         return checkpoint
     
+    def _heal_checkpoint_state(self, checkpoint_dict: dict) -> dict:
+        """Heal any inconsistent state in a checkpoint"""
+        game_state = checkpoint_dict.get('game_state', {})
+        phase = game_state.get('phase', '')
+        
+        # Fix inconsistent draw_phase state
+        if phase == 'draw_phase' and game_state.get('drawn_card'):
+            logger.warning(
+                f"Healing checkpoint: Clearing drawn_card in draw_phase for room {checkpoint_dict['room_id']}"
+            )
+            game_state['drawn_card'] = None
+            
+        # Clear played_card in draw_phase (shouldn't exist)
+        if phase == 'draw_phase' and game_state.get('played_card'):
+            logger.warning(
+                f"Healing checkpoint: Clearing played_card in draw_phase for room {checkpoint_dict['room_id']}"
+            )
+            game_state['played_card'] = None
+            
+        # Fix King phases - ensure no drawn_card exists
+        if phase in ['king_view_phase', 'king_swap_phase'] and game_state.get('drawn_card'):
+            logger.warning(
+                f"Healing checkpoint: Clearing drawn_card in {phase} for room {checkpoint_dict['room_id']}"
+            )
+            game_state['drawn_card'] = None
+            
+        # Clear special_action if it doesn't match the phase
+        if phase not in ['waiting_for_special_action', 'king_view_phase', 'king_swap_phase'] and game_state.get('special_action'):
+            logger.warning(
+                f"Healing checkpoint: Clearing special_action in {phase} for room {checkpoint_dict['room_id']}"
+            )
+            game_state['special_action'] = None
+            
+        return checkpoint_dict
+    
     async def get_latest_checkpoint(self, room_id: str) -> Optional[GameCheckpoint]:
-        """Get the latest checkpoint for a room"""
+        """Get the latest checkpoint for a room with healing"""
         checkpoint_key = f"checkpoint:{room_id}:latest"
         data = await self.redis.get(checkpoint_key)
         
@@ -96,6 +144,10 @@ class CheckpointManager:
             return None
         
         checkpoint_dict = json.loads(data)
+        
+        # Heal any inconsistent state
+        checkpoint_dict = self._heal_checkpoint_state(checkpoint_dict)
+        
         return GameCheckpoint(
             checkpoint_id=checkpoint_dict['checkpoint_id'],
             room_id=checkpoint_dict['room_id'],

@@ -154,12 +154,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     addVisibleCard
   } = useGamePlayStore.getState()
 
-  const convertCard = (card: any): GameCard => ({
-    id: card.id || '',
-    rank: card.rank,
-    suit: card.suit,
-    isTemporarilyViewed: card.isTemporarilyViewed || false
-  })
 
   // Helper function to parse card strings from backend (e.g., "3♥", "K♠", "Joker")
   const parseCardString = (cardStr: string): GameCard => {
@@ -781,14 +775,14 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         
         // Set drawn card if exists and belongs to current player
         if (gameState.drawn_card && gameState.current_player === currentUserId) {
-          setDrawnCard(convertCard(gameState.drawn_card))
+          setDrawnCard(parseCardString(gameState.drawn_card))
         } else {
           setDrawnCard(null)
         }
         
         // Set discard pile
         if (gameState.discard_top) {
-          addCardToDiscard(convertCard(gameState.discard_top))
+          addCardToDiscard(parseCardString(gameState.discard_top))
         }
         
         // Set special action with proper type conversion
@@ -846,37 +840,6 @@ export const useGameWebSocket = () => {
     setSpecialAction,
     setStackCaller
   } = useGamePlayStore()
-  
-  
-  // Helper function to parse card strings from backend (e.g., "3♥", "K♠", "Joker")
-  const parseCardString = (cardStr: string): GameCard => {
-    if (cardStr === 'Joker') {
-      return {
-        id: 'parsed_card',
-        rank: 0, // Joker
-        suit: null,
-        isTemporarilyViewed: false
-      }
-    } else {
-      // Extract rank and suit from string
-      const suitSymbols = { '♥': Suit.HEARTS, '♦': Suit.DIAMONDS, '♣': Suit.CLUBS, '♠': Suit.SPADES }
-      const lastChar = cardStr.slice(-1)
-      const suit = suitSymbols[lastChar as keyof typeof suitSymbols] || Suit.HEARTS
-      const rankStr = cardStr.slice(0, -1)
-      let rank = parseInt(rankStr)
-      if (isNaN(rank)) {
-        // Handle face cards
-        const faceCards = { 'A': 1, 'J': 11, 'Q': 12, 'K': 13 }
-        rank = faceCards[rankStr as keyof typeof faceCards] || 1
-      }
-      return {
-        id: 'parsed_card',
-        rank,
-        suit,
-        isTemporarilyViewed: false
-      }
-    }
-  }
   
   const socketUrl = 'ws://localhost:8000/ws'
 
@@ -1006,14 +969,14 @@ export const useGameWebSocket = () => {
         
         // Set drawn card if exists and belongs to current player
         if (gameState.drawn_card && gameState.current_player === currentUserId) {
-          setDrawnCard(convertCard(gameState.drawn_card))
+          setDrawnCard(parseCardString(gameState.drawn_card))
         } else {
           setDrawnCard(null)
         }
         
         // Set discard pile
         if (gameState.discard_top) {
-          addCardToDiscard(convertCard(gameState.discard_top))
+          addCardToDiscard(parseCardString(gameState.discard_top))
         }
         
         // Set special action with proper type conversion

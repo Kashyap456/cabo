@@ -907,6 +907,9 @@ class CaboGame:
             self.pending_timeouts.pop(self.state.stack_timer_id, None)
             self.state.stack_timer_id = None
         self.state.phase = GamePhase.DRAW_PHASE
+        # IMPORTANT: Clear any leftover drawn/played cards when returning to draw phase
+        self.state.drawn_card = None
+        self.state.played_card = None
 
     def _clear_special_action_state(self):
         """Clear special action state"""
