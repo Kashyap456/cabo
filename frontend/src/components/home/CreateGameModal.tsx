@@ -1,6 +1,7 @@
 import { useCreateGame } from '@/api/rooms'
 import * as Dialog from '@radix-ui/react-dialog'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import ConflictModal from './ConflictModal'
 
 interface CreateGameModalProps {
   open: boolean
@@ -12,11 +13,25 @@ const CreateGameModal = ({ open, onOpenChange }: CreateGameModalProps) => {
     maxPlayers: 4,
     gameMode: 'classic',
   })
-  const { mutate: createGame, isPending } = useCreateGame()
+  const { mutate: createGame, isPending, conflictError, clearConflict } = useCreateGame()
+  const showConflictModal = !!conflictError
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    createGame(config, {
+    createGame({ config, force: false }, {
+      onSuccess: () => {
+        onOpenChange(false)
+      },
+      onError: (error) => {
+        if (error.response?.status !== 409) {
+          console.error('Failed to create game:', error)
+        }
+      },
+    })
+  }
+
+  const handleForceCreate = () => {
+    createGame({ config, force: true }, {
       onSuccess: () => {
         onOpenChange(false)
       },
@@ -27,14 +42,15 @@ const CreateGameModal = ({ open, onOpenChange }: CreateGameModalProps) => {
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg w-96">
-          <Dialog.Title className="text-lg font-semibold mb-4">
-            Create Game
-          </Dialog.Title>
-          <form onSubmit={handleSubmit} className="space-y-4">
+    <>
+      <Dialog.Root open={open} onOpenChange={onOpenChange}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg w-96">
+            <Dialog.Title className="text-lg font-semibold mb-4">
+              Create Game
+            </Dialog.Title>
+            <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label
                 htmlFor="maxPlayers"
@@ -95,6 +111,17 @@ const CreateGameModal = ({ open, onOpenChange }: CreateGameModalProps) => {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+    
+    <ConflictModal
+      open={showConflictModal}
+      onOpenChange={(open) => {
+        if (!open) clearConflict()
+      }}
+      currentRoom={conflictError?.current_room || null}
+      onForceAction={handleForceCreate}
+      actionText="Create New Game"
+    />
+  </>
   )
 }
 

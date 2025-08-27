@@ -1,6 +1,7 @@
 import { useJoinGame } from '@/api/rooms'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useState } from 'react'
+import ConflictModal from './ConflictModal'
 
 interface JoinGameModalProps {
   open: boolean
@@ -9,12 +10,29 @@ interface JoinGameModalProps {
 
 const JoinGameModal = ({ open, onOpenChange }: JoinGameModalProps) => {
   const [roomCode, setRoomCode] = useState('')
-  const { mutate: joinGame, isPending } = useJoinGame()
+  const { mutate: joinGame, isPending, conflictError, clearConflict } = useJoinGame()
+  const showConflictModal = !!conflictError
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (roomCode.trim().length === 6) {
-      joinGame(roomCode.toUpperCase(), {
+      joinGame({ roomCode: roomCode.toUpperCase(), force: false }, {
+        onSuccess: () => {
+          setRoomCode('')
+          onOpenChange(false)
+        },
+        onError: (error) => {
+          if (error.response?.status !== 409) {
+            console.error('Failed to join game:', error)
+          }
+        },
+      })
+    }
+  }
+
+  const handleForceJoin = () => {
+    if (roomCode.trim().length === 6) {
+      joinGame({ roomCode: roomCode.toUpperCase(), force: true }, {
         onSuccess: () => {
           setRoomCode('')
           onOpenChange(false)
@@ -35,7 +53,8 @@ const JoinGameModal = ({ open, onOpenChange }: JoinGameModalProps) => {
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/50" />
         <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg w-96">
@@ -84,6 +103,17 @@ const JoinGameModal = ({ open, onOpenChange }: JoinGameModalProps) => {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+    
+    <ConflictModal
+      open={showConflictModal}
+      onOpenChange={(open) => {
+        if (!open) clearConflict()
+      }}
+      currentRoom={conflictError?.current_room || null}
+      onForceAction={handleForceJoin}
+      actionText="Join New Game"
+    />
+  </>
   )
 }
 

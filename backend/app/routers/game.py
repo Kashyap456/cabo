@@ -24,6 +24,7 @@ connection_manager: Optional[ConnectionManager] = None
 
 class CreateRoomRequest(BaseModel):
     config: Optional[Dict[str, Any]] = None
+    force: bool = False
 
 
 class CreateRoomResponse(BaseModel):
@@ -85,6 +86,10 @@ async def create_room(
 ):
     """Create a new game room"""
     try:
+        # If force flag is set, leave current room first
+        if request.force:
+            await room_manager.leave_room(db, str(current_session.user_id))
+        
         room = await room_manager.create_room(
             db,
             str(current_session.user_id),
@@ -116,11 +121,16 @@ async def create_room(
 @router.post("/{room_code}/join", response_model=JoinRoomResponse)
 async def join_room(
     room_code: str,
+    force: bool = False,
     db: AsyncSession = Depends(get_db),
     current_session: UserSession = Depends(get_current_session)
 ):
     """Join an existing room"""
     try:
+        # If force flag is set, leave current room first
+        if force:
+            await room_manager.leave_room(db, str(current_session.user_id))
+        
         room = await room_manager.join_room(
             db,
             room_code.upper(),  # Normalize to uppercase
