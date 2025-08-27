@@ -1232,15 +1232,16 @@ class CaboGame:
         
         # Update visibility tracking for ALL viewers who can see the swapped cards
         # This ensures cards remain visible at their new locations
+        # IMPORTANT: Only update visibility for the EXACT cards that were swapped
         for viewer_id in self.state.card_visibility:
             updated_visibility = []
             for viewed_player_id, viewed_index in self.state.card_visibility[viewer_id]:
-                # Check if this visibility entry is affected by the swap
+                # Get the card that WAS at this position before the swap
                 if viewed_player_id == message.player_id and viewed_index == message.own_index:
-                    # Viewer sees player's card that moved to target location
+                    # This viewer was seeing player_card which is now at target location
                     updated_visibility.append((message.target_player_id, message.target_index))
                 elif viewed_player_id == message.target_player_id and viewed_index == message.target_index:
-                    # Viewer sees target's card that moved to player location
+                    # This viewer was seeing target_card which is now at player location
                     updated_visibility.append((message.player_id, message.own_index))
                 else:
                     # This visibility entry is not affected by the swap

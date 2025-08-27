@@ -662,6 +662,11 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         // Now re-apply visibility to update the isTemporarilyViewed flags based on new visibility map
         const visibleCards = gameEvent.data.updated_visibility[currentUserId] || []
         
+        // For King swaps, we know exactly which cards were swapped
+        // Only make the swapped cards visible, not other cards of the same rank
+        const swappedPlayerCard = gameEvent.data.player_card ? parseCardString(gameEvent.data.player_card) : null
+        const swappedTargetCard = gameEvent.data.target_card ? parseCardString(gameEvent.data.target_card) : null
+        
         // Update all player cards based on the new visibility
         const players = useGamePlayStore.getState().players
         players.forEach(player => {
@@ -671,7 +676,20 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
               // Handle both array and object formats
               if (Array.isArray(visibility)) {
                 const [targetId, cardIdx] = visibility
-                return targetId === player.id && cardIdx === index
+                if (targetId === player.id && cardIdx === index) {
+                  // For King swap, verify this is actually the swapped card
+                  if (player.id === gameEvent.data.player_id && index === gameEvent.data.player_index) {
+                    // This position now has the target card
+                    return swappedTargetCard && card.rank === swappedTargetCard.rank && card.suit === swappedTargetCard.suit
+                  } else if (player.id === gameEvent.data.target_id && index === gameEvent.data.target_index) {
+                    // This position now has the player card
+                    return swappedPlayerCard && card.rank === swappedPlayerCard.rank && card.suit === swappedPlayerCard.suit
+                  } else {
+                    // Other visible cards not involved in the swap
+                    return true
+                  }
+                }
+                return false
               } else {
                 return visibility.player_id === player.id && visibility.card_index === index
               }
