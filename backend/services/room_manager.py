@@ -1,5 +1,6 @@
 import random
 import string
+import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
@@ -8,6 +9,8 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.orm import selectinload
 
 from app.models import GameRoom, UserSession, RoomPhase, UserToRoom
+
+logger = logging.getLogger(__name__)
 
 
 class AlreadyInRoomError(Exception):
@@ -298,6 +301,19 @@ class RoomManager:
             .where(GameRoom.room_id == room_id)
         )
         return result.scalar_one_or_none()
+    
+    async def update_room_activity(self, db: AsyncSession, room_id: str) -> None:
+        """Update the last_activity timestamp for a room"""
+        try:
+            await db.execute(
+                update(GameRoom)
+                .where(GameRoom.room_id == room_id)
+                .values(last_activity=datetime.utcnow())
+            )
+            await db.commit()
+        except Exception as e:
+            logger.error(f"Failed to update room activity for {room_id}: {e}")
+            await db.rollback()
 
     async def get_room_players(self, db: AsyncSession, room_id: str) -> List[UserSession]:
         """Get all sessions in a room"""
@@ -352,3 +368,7 @@ class RoomManager:
 
         await db.commit()
         return len(expired_rooms)
+
+
+# Global instance
+room_manager = RoomManager()

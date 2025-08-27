@@ -19,8 +19,10 @@ from services.game_manager import (
 from services.connection_manager import ConnectionManager
 from services.redis_manager import redis_manager
 from services.redis_game_store import redis_game_store
+from services.room_manager import room_manager
 from app.models import GameRoom, UserSession
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +137,14 @@ class GameOrchestrator:
                     # Save and publish if there were events or messages to process
                     if events or messages:
                         await self.game_store.save_game(room_id, game, room_code)
+                        
+                        # Update room activity in database
+                        try:
+                            async for db in get_db():
+                                await room_manager.update_room_activity(db, room_id)
+                                break
+                        except Exception as e:
+                            logger.error(f"Failed to update room activity: {e}")
 
                         # Publish events to stream
                         for event in events:

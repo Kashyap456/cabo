@@ -7,6 +7,7 @@ from app.middleware.session import SessionMiddleware
 from services.connection_manager import ConnectionManager
 from services.game_orchestrator import GameOrchestrator
 from services.redis_manager import redis_manager
+from services.cleanup_service import cleanup_service
 import logging
 import sys
 
@@ -44,6 +45,11 @@ async def lifespan(app: FastAPI):
         game.set_game_orchestrator(game_orchestrator)
         ws.set_game_orchestrator(game_orchestrator)
         ws.set_connection_manager(connection_manager)
+        
+        # Set up cleanup service with connection manager and start it
+        cleanup_service.set_connection_manager(connection_manager)
+        cleanup_service.start()
+        logger.info("Cleanup service started with connection manager")
 
         logger.info("Application started successfully with restored games")
 
@@ -61,6 +67,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Application shutting down")
+    cleanup_service.stop()
     await redis_manager.disconnect()
 
 app = FastAPI(lifespan=lifespan)
