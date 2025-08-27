@@ -138,6 +138,41 @@ const convertSpecialActionType = (backendType: string): string => {
   }
 }
 
+// Helper function to sync isTemporarilyViewed flags with visibility map
+const syncCardVisibility = (visibilityMap: any) => {
+  const { updatePlayerCards, players, setCardVisibility } = useGamePlayStore.getState()
+  const currentUserId = useAuthStore.getState().sessionId
+  
+  // Update the visibility map
+  setCardVisibility(visibilityMap)
+  
+  // Get what the current user can see
+  const visibleCards = visibilityMap[currentUserId] || []
+  
+  // Update all player cards based on the new visibility
+  players.forEach(player => {
+    const updatedCards = player.cards.map((card, index) => {
+      // Check if current user can see this card
+      const canSee = visibleCards.some((visibility: any) => {
+        // Handle both array and object formats
+        if (Array.isArray(visibility)) {
+          const [targetId, cardIdx] = visibility
+          return targetId === player.id && cardIdx === index
+        } else {
+          return visibility.player_id === player.id && visibility.card_index === index
+        }
+      })
+      
+      // Update only the isTemporarilyViewed flag
+      return {
+        ...card,
+        isTemporarilyViewed: canSee
+      }
+    })
+    updatePlayerCards(player.id, updatedCards)
+  })
+}
+
 const handleGameEvent = (gameEvent: GameEventMessage) => {
   const {
     setCurrentPlayer,
@@ -255,6 +290,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     case 'turn_changed': {
       console.log('Turn changed to player:', gameEvent.data.current_player_name)
       const currentUserId = useAuthStore.getState().sessionId
+      const { setCardVisibility } = useGamePlayStore.getState()
       setCurrentPlayer(gameEvent.data.current_player)
       
       // When turn changes, we're in the draw phase
@@ -263,7 +299,10 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       // Clear special action when turn changes
       setSpecialAction(null)
       
-      // Clear all temporarily viewed cards when turn changes
+      // Turn changes always clear ALL visibility (per game rules)
+      // Reset visibility map and clear all isTemporarilyViewed flags
+      setCardVisibility({})
+      
       const players = useGamePlayStore.getState().players
       players.forEach(player => {
         const updatedCards = player.cards.map(card => ({
@@ -541,35 +580,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       
       // Update visibility for all players affected by the swap
       if (gameEvent.data.updated_visibility) {
-        // This contains visibility updates for all viewers who could see the swapped cards
-        setCardVisibility(gameEvent.data.updated_visibility)
-        
-        // Now re-apply visibility to update the isTemporarilyViewed flags based on new visibility map
-        const visibleCards = gameEvent.data.updated_visibility[currentUserId] || []
-        
-        // Update all player cards based on the new visibility
-        const players = useGamePlayStore.getState().players
-        players.forEach(player => {
-          const updatedCards = player.cards.map((card, index) => {
-            // Check if current user can see this card based on updated visibility
-            const canSee = visibleCards.some((visibility) => {
-              // Handle both array and object formats
-              if (Array.isArray(visibility)) {
-                const [targetId, cardIdx] = visibility
-                return targetId === player.id && cardIdx === index
-              } else {
-                return visibility.player_id === player.id && visibility.card_index === index
-              }
-            })
-            
-            // Update the card's visibility flag
-            return {
-              ...card,
-              isTemporarilyViewed: canSee
-            }
-          })
-          updatePlayerCards(player.id, updatedCards)
-        })
+        syncCardVisibility(gameEvent.data.updated_visibility)
       }
       
       // Update player cards if the data includes the new card states (legacy support)
@@ -785,10 +796,11 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
             const isSetupPhase = gameState.phase === 'setup'
             const isSetupVisible = isOwnCard && isSetupPhase && index < 2
             
+            // Keep the actual card data, just update visibility flag
             return {
               id: card.id,
-              rank: (canSee || isSetupVisible) ? card.rank : ('?' as const),
-              suit: (canSee || isSetupVisible) ? card.suit : ('?' as const),
+              rank: card.rank,
+              suit: card.suit,
               isTemporarilyViewed: canSee || isSetupVisible
             }
           })
@@ -979,10 +991,11 @@ export const useGameWebSocket = () => {
             const isSetupPhase = gameState.phase === 'setup'
             const isSetupVisible = isOwnCard && isSetupPhase && index < 2
             
+            // Keep the actual card data, just update visibility flag
             return {
               id: card.id,
-              rank: (canSee || isSetupVisible) ? card.rank : ('?' as const),
-              suit: (canSee || isSetupVisible) ? card.suit : ('?' as const),
+              rank: card.rank,
+              suit: card.suit,
               isTemporarilyViewed: canSee || isSetupVisible
             }
           })

@@ -1,13 +1,14 @@
 import {
   useGamePlayStore,
   getCardDisplayValue,
-  isCardKnown,
   GamePhase,
 } from '@/stores/game_play_state'
 import { useAuthStore } from '@/stores/auth'
 import { useGameWebSocket } from '@/api/game_ws'
 import { useSpecialActionHandler } from '@/hooks/useSpecialActionHandler'
+import { useCardVisibility } from '@/hooks/useCardVisibility'
 import ActionPanel from './ActionPanel'
+import Card from '../game/Card'
 
 export default function PlayingView() {
   const {
@@ -27,6 +28,7 @@ export default function PlayingView() {
 
   const { sessionId } = useAuthStore()
   const { sendMessage } = useGameWebSocket()
+  const { isCardVisible } = useCardVisibility()
   const currentPlayer = players.find((p) => p.id === sessionId)
   const activePlayer = getCurrentPlayer()
 
@@ -146,12 +148,17 @@ export default function PlayingView() {
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
           <h3 className="font-semibold text-green-800 mb-2">Drawn Card</h3>
           <div className="flex justify-center">
-            <div
+            <Card
+              card={{
+                rank: drawnCard.rank,
+                suit: drawnCard.suit,
+                isFaceUp: true
+              }}
+              size="medium"
               onClick={handleDrawnCardClick}
-              className="w-16 h-24 border-2 border-green-400 rounded-lg bg-white flex items-center justify-center text-sm font-medium shadow-lg cursor-pointer hover:bg-green-50 hover:border-green-500 transition-all duration-200 transform hover:scale-105"
-            >
-              {getCardDisplayValue(drawnCard, true)}
-            </div>
+              className="border-green-400 hover:border-green-500"
+              isSelectable={true}
+            />
           </div>
           <p className="text-center text-sm text-green-700 mt-2">
             Click the card to play it, or click one of your cards below to
@@ -182,9 +189,14 @@ export default function PlayingView() {
           {/* Discard Pile */}
           <div className="text-center">
             {topDiscardCard ? (
-              <div className="w-16 h-24 bg-white border-2 border-gray-300 rounded-lg flex items-center justify-center font-semibold shadow-lg">
-                {getCardDisplayValue(topDiscardCard, true)}
-              </div>
+              <Card
+                card={{
+                  rank: topDiscardCard.rank,
+                  suit: topDiscardCard.suit,
+                  isFaceUp: true
+                }}
+                size="medium"
+              />
             ) : (
               <div className="w-16 h-24 bg-gray-100 border-2 border-gray-300 rounded-lg flex items-center justify-center text-gray-500">
                 Empty
@@ -277,26 +289,26 @@ export default function PlayingView() {
                   }
                 }
 
+                const cardIsVisible = isCardVisible(player.id, cardIndex, card)
+                
                 return (
-                  <div
+                  <Card
                     key={card.id}
+                    card={{
+                      rank: card.rank,
+                      suit: card.suit,
+                      isFaceUp: cardIsVisible
+                    }}
+                    size="small"
                     onClick={handleCardClick}
-                    className={`w-12 h-16 border-2 rounded flex items-center justify-center text-xs font-medium ${
-                      isCardKnown(card) && card.isTemporarilyViewed
-                        ? 'bg-green-50 border-green-300 text-green-800'
-                        : 'bg-gray-100 border-gray-300 text-gray-500'
-                    } ${
-                      isSelected
-                        ? 'ring-2 ring-purple-500 border-purple-400 bg-purple-50'
+                    isSelected={isSelected}
+                    isSelectable={canReplaceCard || canSelectForSpecial}
+                    className={
+                      cardIsVisible && card.isTemporarilyViewed
+                        ? 'ring-2 ring-green-400'
                         : ''
-                    } ${
-                      canReplaceCard || canSelectForSpecial
-                        ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 transform hover:scale-105'
-                        : ''
-                    }`}
-                  >
-                    {getCardDisplayValue(card)}
-                  </div>
+                    }
+                  />
                 )
               })}
             </div>
