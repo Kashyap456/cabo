@@ -523,7 +523,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'cards_swapped': {
       console.log('Cards swapped between:', gameEvent.data.player, 'and:', gameEvent.data.target)
-      const { updatePlayerCards, getPlayerById } = useGamePlayStore.getState()
+      const { updatePlayerCards, getPlayerById, setCardVisibility } = useGamePlayStore.getState()
+      const currentUserId = useAuthStore.getState().sessionId
       
       // Swap the cards in the frontend state
       const player = getPlayerById(gameEvent.data.player_id)
@@ -546,9 +547,35 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       
       // Update visibility for all players affected by the swap
       if (gameEvent.data.updated_visibility) {
-        const { setCardVisibility } = useGamePlayStore.getState()
         // This contains visibility updates for all viewers who could see the swapped cards
         setCardVisibility(gameEvent.data.updated_visibility)
+        
+        // Now re-apply visibility to update the isTemporarilyViewed flags based on new visibility map
+        const visibleCards = gameEvent.data.updated_visibility[currentUserId] || []
+        
+        // Update all player cards based on the new visibility
+        const players = useGamePlayStore.getState().players
+        players.forEach(player => {
+          const updatedCards = player.cards.map((card, index) => {
+            // Check if current user can see this card based on updated visibility
+            const canSee = visibleCards.some((visibility) => {
+              // Handle both array and object formats
+              if (Array.isArray(visibility)) {
+                const [targetId, cardIdx] = visibility
+                return targetId === player.id && cardIdx === index
+              } else {
+                return visibility.player_id === player.id && visibility.card_index === index
+              }
+            })
+            
+            // Update the card's visibility flag
+            return {
+              ...card,
+              isTemporarilyViewed: canSee
+            }
+          })
+          updatePlayerCards(player.id, updatedCards)
+        })
       }
       
       // Update player cards if the data includes the new card states (legacy support)
@@ -593,7 +620,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'king_cards_swapped': {
       console.log('King cards swapped between:', gameEvent.data.player, 'and:', gameEvent.data.target)
-      const { updatePlayerCards, getPlayerById } = useGamePlayStore.getState()
+      const { updatePlayerCards, getPlayerById, setCardVisibility } = useGamePlayStore.getState()
+      const currentUserId = useAuthStore.getState().sessionId
       
       // Swap the cards in the frontend state
       const player = getPlayerById(gameEvent.data.player_id)
@@ -604,10 +632,28 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         const playerCards = [...player.cards]
         const targetCards = [...target.cards]
         
-        // Swap the cards at the specified indices
-        const tempCard = playerCards[gameEvent.data.player_index]
-        playerCards[gameEvent.data.player_index] = targetCards[gameEvent.data.target_index]
-        targetCards[gameEvent.data.target_index] = tempCard
+        // For the current user, if they can see the swapped cards, use the actual card data
+        // Otherwise, swap the unknown cards
+        if (gameEvent.data.player_id === currentUserId || gameEvent.data.target_id === currentUserId) {
+          // Parse the actual card data sent from backend
+          const playerCardData = gameEvent.data.target_card ? parseCardString(gameEvent.data.target_card) : targetCards[gameEvent.data.target_index]
+          const targetCardData = gameEvent.data.player_card ? parseCardString(gameEvent.data.player_card) : playerCards[gameEvent.data.player_index]
+          
+          // Swap with actual card data, preserving IDs
+          playerCards[gameEvent.data.player_index] = {
+            ...playerCardData,
+            id: playerCards[gameEvent.data.player_index].id
+          }
+          targetCards[gameEvent.data.target_index] = {
+            ...targetCardData,
+            id: targetCards[gameEvent.data.target_index].id
+          }
+        } else {
+          // For other players, just swap the cards as-is
+          const tempCard = playerCards[gameEvent.data.player_index]
+          playerCards[gameEvent.data.player_index] = targetCards[gameEvent.data.target_index]
+          targetCards[gameEvent.data.target_index] = tempCard
+        }
         
         // Update both players' cards
         updatePlayerCards(gameEvent.data.player_id, playerCards)
@@ -616,9 +662,35 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       
       // Update visibility for all players affected by the King swap
       if (gameEvent.data.updated_visibility) {
-        const { setCardVisibility } = useGamePlayStore.getState()
         // This contains visibility updates for all viewers who could see the swapped cards
         setCardVisibility(gameEvent.data.updated_visibility)
+        
+        // Now re-apply visibility to update the isTemporarilyViewed flags based on new visibility map
+        const visibleCards = gameEvent.data.updated_visibility[currentUserId] || []
+        
+        // Update all player cards based on the new visibility
+        const players = useGamePlayStore.getState().players
+        players.forEach(player => {
+          const updatedCards = player.cards.map((card, index) => {
+            // Check if current user can see this card based on updated visibility
+            const canSee = visibleCards.some((visibility) => {
+              // Handle both array and object formats
+              if (Array.isArray(visibility)) {
+                const [targetId, cardIdx] = visibility
+                return targetId === player.id && cardIdx === index
+              } else {
+                return visibility.player_id === player.id && visibility.card_index === index
+              }
+            })
+            
+            // Update the card's visibility flag
+            return {
+              ...card,
+              isTemporarilyViewed: canSee
+            }
+          })
+          updatePlayerCards(player.id, updatedCards)
+        })
       }
       
       setSpecialAction({
