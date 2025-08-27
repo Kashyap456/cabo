@@ -353,6 +353,30 @@ class ConnectionManager:
         
         logger.info(f"Cleaned up connection {connection_id}")
     
+    async def close_room_connections(self, room_id: str) -> None:
+        """Close all WebSocket connections for a room."""
+        logger.info(f"Closing all connections for room {room_id}")
+        
+        # Get all connections in the room
+        if room_id in self.room_connections:
+            session_ids = list(self.room_connections[room_id].keys())
+            
+            for session_id in session_ids:
+                connection_id = self.session_to_connection.get(session_id)
+                if connection_id:
+                    # Disconnect and close the WebSocket
+                    await self.disconnect_connection(
+                        connection_id, 
+                        close_websocket=True,
+                        enter_grace=False  # No grace period, game is over
+                    )
+            
+            # Clear room connections
+            if room_id in self.room_connections:
+                del self.room_connections[room_id]
+                
+        logger.info(f"Closed all connections for room {room_id}")
+    
     async def send_to_session(self, session_id: str, message: Dict):
         """Send message to specific session."""
         connection_id = self.session_to_connection.get(session_id)

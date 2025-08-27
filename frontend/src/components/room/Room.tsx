@@ -3,6 +3,7 @@ import { useRoomStore, RoomPhase } from '../../stores/game_state'
 import { useGameWebSocket } from '../../api/game_ws'
 import WaitingView from './WaitingView'
 import PlayingView from './PlayingView'
+import EndGameView from './EndGameView'
 
 interface RoomProps {
   roomCode: string
@@ -63,11 +64,7 @@ export default function Room({ roomCode }: RoomProps) {
 
         {phase === RoomPhase.WAITING && <WaitingView />}
         {phase === RoomPhase.IN_GAME && <PlayingView />}
-        {phase === RoomPhase.ENDED && (
-          <div className="text-center">
-            <p>Game has ended</p>
-          </div>
-        )}
+        {phase === RoomPhase.ENDED && <EndGameView />}
       </div>
     </div>
   )

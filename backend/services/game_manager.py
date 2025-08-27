@@ -884,9 +884,24 @@ class CaboGame:
         # Calculate scores
         scores = [(player.player_id, player.name, player.get_score())
                   for player in self.players]
-        scores.sort(key=lambda x: x[2])  # Sort by score
+        
+        # Sort by score first, then cabo caller wins ties
+        # If cabo_caller has same score as others, they win
+        scores.sort(key=lambda x: (x[2], x[0] != self.state.cabo_caller))
 
-        self.state.winner = scores[0][0]  # Player with lowest score wins
+        self.state.winner = scores[0][0]  # Player with lowest score (and cabo caller on ties) wins
+
+        # Prepare revealed hands for all players
+        player_hands = {}
+        for player in self.players:
+            player_hands[player.player_id] = [
+                {
+                    "rank": card.rank.value,
+                    "suit": card.suit.value if card.suit else None,
+                    "value": card.value
+                }
+                for card in player.hand
+            ]
 
         # Trigger checkpoint for game end
         self._trigger_checkpoint()
@@ -896,7 +911,9 @@ class CaboGame:
             "event": GameEvent("game_ended", {
                 "winner_id": scores[0][0],
                 "winner_name": scores[0][1],
-                "final_scores": [{"player_id": pid, "name": name, "score": score} for pid, name, score in scores]
+                "final_scores": [{"player_id": pid, "name": name, "score": score} for pid, name, score in scores],
+                "player_hands": player_hands,
+                "cabo_caller_id": self.state.cabo_caller
             })
         }
 

@@ -143,6 +143,11 @@ class GameOrchestrator:
                                 event.event_type,
                                 event.data
                             )
+                            
+                            # Schedule cleanup when game ends
+                            if event.event_type == "game_ended":
+                                logger.info(f"Game ended in room {room_id}, scheduling cleanup")
+                                asyncio.create_task(self.schedule_game_cleanup(room_id, delay_seconds=30))
 
                         # Always create checkpoint after processing messages
                         # This ensures reconnecting players get the latest state
@@ -352,6 +357,35 @@ class GameOrchestrator:
             f"replayed {len(missed_events)} events"
         )
 
+    async def schedule_game_cleanup(self, room_id: str, delay_seconds: int = 30):
+        """Schedule game cleanup after delay"""
+        logger.info(f"Scheduling game cleanup for room {room_id} in {delay_seconds} seconds")
+        
+        # Send countdown updates
+        remaining = delay_seconds
+        while remaining > 0:
+            await self.connection_manager.broadcast_to_room(room_id, {
+                "type": "cleanup_countdown",
+                "data": {"remaining_seconds": remaining}
+            })
+            
+            # Wait 5 seconds or until next update
+            wait_time = min(5, remaining)
+            await asyncio.sleep(wait_time)
+            remaining -= wait_time
+        
+        # Send redirect message
+        await self.connection_manager.broadcast_to_room(room_id, {
+            "type": "redirect_home",
+            "data": {"reason": "game_ended"}
+        })
+        
+        # Give clients a moment to process redirect
+        await asyncio.sleep(1)
+        
+        # Now do the actual cleanup
+        await self.end_game(room_id)
+
     async def end_game(self, room_id: str):
         """Clean up game resources"""
         logger.info(f"Cleaning up game for room {room_id}")
@@ -371,11 +405,8 @@ class GameOrchestrator:
         await self.stream_manager.cleanup_stream(room_id)
         await self.checkpoint_manager.cleanup_checkpoints(room_id)
 
-        # Notify all players
-        await self.connection_manager.broadcast_to_room(room_id, {
-            "type": "game_cleanup",
-            "message": "Game has ended"
-        })
+        # Close all WebSocket connections for this room
+        await self.connection_manager.close_room_connections(room_id)
 
     def get_game(self, room_id: str) -> Optional[CaboGame]:
         """Get game instance for a room (loads from Redis)"""

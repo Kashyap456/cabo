@@ -70,6 +70,23 @@ export interface StackCaller {
   timestamp: number  // When the stack call was made
 }
 
+export interface EndGameData {
+  winnerId: string
+  winnerName: string
+  finalScores: Array<{
+    player_id: string
+    name: string
+    score: number
+  }>
+  playerHands: { [playerId: string]: Array<{
+    rank: string
+    suit: string | null
+    value: number
+  }> }
+  caboCaller?: string
+  countdownSeconds?: number
+}
+
 export interface GamePlayState {
   // Game state
   currentPlayerId: string
@@ -102,6 +119,9 @@ export interface GamePlayState {
   caboCalledBy: string | null
   finalRoundStarted: boolean
   
+  // Endgame state
+  endGameData: EndGameData | null
+  
   // Actions
   setCurrentPlayer: (playerId: string) => void
   setPhase: (phase: GamePhase) => void
@@ -119,6 +139,8 @@ export interface GamePlayState {
   setCalledCabo: (playerId: string) => void
   resetGameState: () => void
   setDiscardPile: (cards: Card[]) => void
+  setEndGameData: (data: EndGameData) => void
+  updateCountdown: (seconds: number) => void
   
   // Helper functions
   getCurrentPlayer: () => PlayerGameState | null
@@ -143,6 +165,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   stackCaller: null,
   caboCalledBy: null,
   finalRoundStarted: false,
+  endGameData: null,
   
   // Actions
   setCurrentPlayer: (playerId) => set((state) => {
@@ -238,13 +261,20 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     selectedCards: [],
     stackCaller: null,
     caboCalledBy: null,
-    finalRoundStarted: false
+    finalRoundStarted: false,
+    endGameData: null
   }),
   
   setDiscardPile: (cards) => set({
     discardPile: cards,
     topDiscardCard: cards.length > 0 ? cards[cards.length - 1] : null
   }),
+  
+  setEndGameData: (data) => set({ endGameData: data }),
+  
+  updateCountdown: (seconds) => set((state) => ({
+    endGameData: state.endGameData ? { ...state.endGameData, countdownSeconds: seconds } : null
+  })),
   
   // Helper functions
   getCurrentPlayer: () => {

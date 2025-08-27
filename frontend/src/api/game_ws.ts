@@ -734,8 +734,23 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'game_ended': {
       console.log('Game ended, winner:', gameEvent.data.winner_name)
+      
+      // Import the store functions we need
+      const { setEndGameData, setPhase } = useGamePlayStore.getState()
+      
+      // Set the endgame data
+      setEndGameData({
+        winnerId: gameEvent.data.winner_id,
+        winnerName: gameEvent.data.winner_name,
+        finalScores: gameEvent.data.final_scores,
+        playerHands: gameEvent.data.player_hands,
+        caboCaller: gameEvent.data.cabo_caller_id,
+        countdownSeconds: 30  // Start with 30 seconds
+      })
+      
       setPhase(GamePhase.ENDED)
-      // Could show winner announcement
+      // Also update room phase to show endgame view
+      useRoomStore.getState().setPhase(RoomPhase.ENDED)
       break
     }
     
@@ -1093,6 +1108,24 @@ export const useGameWebSocket = () => {
       case 'ping': {
         // Respond to server ping with pong
         sendWebSocketMessage({ type: 'pong' })
+        break
+      }
+      
+      case 'cleanup_countdown': {
+        // Update countdown in endgame data
+        const { updateCountdown } = useGamePlayStore.getState()
+        const countdownMessage = message as { type: string; data: { remaining_seconds: number } }
+        updateCountdown(countdownMessage.data.remaining_seconds)
+        break
+      }
+      
+      case 'redirect_home': {
+        // Redirect to home page using router
+        console.log('Game cleanup complete, redirecting to home...')
+        // The EndGameView component handles navigation via the router
+        // We just clear the game state
+        useGamePlayStore.getState().resetGameState()
+        useRoomStore.getState().reset()
         break
       }
       
