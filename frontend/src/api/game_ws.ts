@@ -122,6 +122,22 @@ export interface GameEventMessage extends WebSocketMessage {
   timestamp?: string
 }
 
+// Convert backend special action types to frontend format
+const convertSpecialActionType = (backendType: string): string => {
+  switch (backendType) {
+    case 'view_own':
+      return 'VIEW_OWN'
+    case 'view_opponent':
+      return 'VIEW_OPPONENT'
+    case 'swap_opponent':
+      return 'SWAP_CARDS'
+    case 'king_effect':
+      return 'KING_VIEW' // King starts with view phase
+    default:
+      return backendType
+  }
+}
+
 const handleGameEvent = (gameEvent: GameEventMessage) => {
   const {
     setCurrentPlayer,
@@ -179,16 +195,25 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     case 'game_started': {
       console.log('Game started with setup phase')
       setPhase(GamePhase.SETUP)
+      // Also update room phase to show playing view
+      useRoomStore.getState().setPhase(RoomPhase.IN_GAME)
       break
     }
 
     case 'game_phase_changed': {
       console.log('Game phase changed to:', gameEvent.data.phase, 'with data:', gameEvent.data)
-      const newPhase = gameEvent.data.phase as GamePhase
-      setPhase(newPhase)
+      const newPhase = gameEvent.data.phase
       
-      // When transitioning from SETUP to PLAYING, hide all temporarily viewed cards
-      if (newPhase === 'playing') {
+      // Validate phase is a valid GamePhase value
+      if (!Object.values(GamePhase).includes(newPhase)) {
+        console.error('Invalid game phase received:', newPhase)
+        return
+      }
+      
+      setPhase(newPhase as GamePhase)
+      
+      // When transitioning from SETUP to DRAW_PHASE, hide all temporarily viewed cards  
+      if (newPhase === 'draw_phase') {
         const currentUserId = useAuthStore.getState().sessionId
         const players = useGamePlayStore.getState().players
         
@@ -215,22 +240,10 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         const currentUserId = useAuthStore.getState().sessionId
         const actionType = gameEvent.data.special_action_type
         
-        // Map backend action types to frontend types
-        let frontendActionType: 'VIEW_OWN' | 'VIEW_OPPONENT' | 'SWAP_CARDS' | 'KING_VIEW' | 'KING_SWAP'
-        if (newPhase === 'king_view_phase') {
-          frontendActionType = 'KING_VIEW'
-        } else if (newPhase === 'king_swap_phase') {
-          frontendActionType = 'KING_SWAP'
-        } else if (actionType === 'view_own') {
-          frontendActionType = 'VIEW_OWN'
-        } else if (actionType === 'view_opponent') {
-          frontendActionType = 'VIEW_OPPONENT'
-        } else if (actionType === 'swap_opponent') {
-          frontendActionType = 'SWAP_CARDS'
-        } else {
-          console.warn('Unknown special action type:', actionType)
-          frontendActionType = 'VIEW_OWN' // Default fallback
-        }
+        // Use the conversion function
+        const frontendActionType = newPhase === 'king_view_phase' ? 'KING_VIEW' :
+                                    newPhase === 'king_swap_phase' ? 'KING_SWAP' :
+                                    convertSpecialActionType(actionType)
         
         setSpecialAction({
           type: frontendActionType,
@@ -250,8 +263,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       const currentUserId = useAuthStore.getState().sessionId
       setCurrentPlayer(gameEvent.data.current_player)
       
-      // When turn changes, we're back in the playing phase
-      setPhase(GamePhase.PLAYING)
+      // When turn changes, we're in the draw phase
+      setPhase(GamePhase.DRAW_PHASE)
       
       // Clear special action when turn changes
       setSpecialAction(null)
@@ -509,8 +522,36 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'cards_swapped': {
-      console.log('Cards swapped between:', gameEvent.data.player, 'and', gameEvent.data.target)
-      // Update player cards if the data includes the new card states
+      console.log('Cards swapped between:', gameEvent.data.player, 'and:', gameEvent.data.target)
+      const { updatePlayerCards, getPlayerById } = useGamePlayStore.getState()
+      
+      // Swap the cards in the frontend state
+      const player = getPlayerById(gameEvent.data.player_id)
+      const target = getPlayerById(gameEvent.data.target_id)
+      
+      if (player && target && gameEvent.data.player_index !== undefined && gameEvent.data.target_index !== undefined) {
+        // Make copies of the card arrays
+        const playerCards = [...player.cards]
+        const targetCards = [...target.cards]
+        
+        // Swap the cards at the specified indices
+        const tempCard = playerCards[gameEvent.data.player_index]
+        playerCards[gameEvent.data.player_index] = targetCards[gameEvent.data.target_index]
+        targetCards[gameEvent.data.target_index] = tempCard
+        
+        // Update both players' cards
+        updatePlayerCards(gameEvent.data.player_id, playerCards)
+        updatePlayerCards(gameEvent.data.target_id, targetCards)
+      }
+      
+      // Update visibility for all players affected by the swap
+      if (gameEvent.data.updated_visibility) {
+        const { setCardVisibility } = useGamePlayStore.getState()
+        // This contains visibility updates for all viewers who could see the swapped cards
+        setCardVisibility(gameEvent.data.updated_visibility)
+      }
+      
+      // Update player cards if the data includes the new card states (legacy support)
       if (gameEvent.data.updated_players) {
         gameEvent.data.updated_players.forEach((playerData: any) => {
           const cards = playerData.cards.map(convertCard)
@@ -551,7 +592,35 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'king_cards_swapped': {
-      console.log('King cards swapped between:', gameEvent.data.player, 'and', gameEvent.data.target)
+      console.log('King cards swapped between:', gameEvent.data.player, 'and:', gameEvent.data.target)
+      const { updatePlayerCards, getPlayerById } = useGamePlayStore.getState()
+      
+      // Swap the cards in the frontend state
+      const player = getPlayerById(gameEvent.data.player_id)
+      const target = getPlayerById(gameEvent.data.target_id)
+      
+      if (player && target && gameEvent.data.player_index !== undefined && gameEvent.data.target_index !== undefined) {
+        // Make copies of the card arrays
+        const playerCards = [...player.cards]
+        const targetCards = [...target.cards]
+        
+        // Swap the cards at the specified indices
+        const tempCard = playerCards[gameEvent.data.player_index]
+        playerCards[gameEvent.data.player_index] = targetCards[gameEvent.data.target_index]
+        targetCards[gameEvent.data.target_index] = tempCard
+        
+        // Update both players' cards
+        updatePlayerCards(gameEvent.data.player_id, playerCards)
+        updatePlayerCards(gameEvent.data.target_id, targetCards)
+      }
+      
+      // Update visibility for all players affected by the King swap
+      if (gameEvent.data.updated_visibility) {
+        const { setCardVisibility } = useGamePlayStore.getState()
+        // This contains visibility updates for all viewers who could see the swapped cards
+        setCardVisibility(gameEvent.data.updated_visibility)
+      }
+      
       setSpecialAction({
         type: 'KING_SWAP',
         playerId: gameEvent.data.player_id || '',
@@ -650,10 +719,10 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
           addCardToDiscard(convertCard(gameState.discard_top))
         }
         
-        // Set special action
-        if (gameState.special_action_player) {
+        // Set special action with proper type conversion
+        if (gameState.special_action_player && gameState.special_action_type) {
           setSpecialAction({
-            type: gameState.special_action_type || '',
+            type: convertSpecialActionType(gameState.special_action_type),
             playerId: gameState.special_action_player
           })
         } else {
@@ -875,10 +944,10 @@ export const useGameWebSocket = () => {
           addCardToDiscard(convertCard(gameState.discard_top))
         }
         
-        // Set special action
-        if (gameState.special_action_player) {
+        // Set special action with proper type conversion
+        if (gameState.special_action_player && gameState.special_action_type) {
           setSpecialAction({
-            type: gameState.special_action_type || '',
+            type: convertSpecialActionType(gameState.special_action_type),
             playerId: gameState.special_action_player
           })
         } else {

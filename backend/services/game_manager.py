@@ -138,7 +138,8 @@ class Player:
 
 class GamePhase(Enum):
     SETUP = "setup"
-    PLAYING = "playing"
+    DRAW_PHASE = "draw_phase"  # Can draw a card or call cabo
+    CARD_DRAWN = "card_drawn"  # Must play or replace the drawn card
     WAITING_FOR_SPECIAL_ACTION = "waiting_for_special_action"
     KING_VIEW_PHASE = "king_view_phase"
     KING_SWAP_PHASE = "king_swap_phase"
@@ -483,7 +484,7 @@ class CaboGame:
 
     def _handle_draw_card(self, message: DrawCardMessage) -> Dict[str, Any]:
         """Handle draw card action"""
-        if self.state.phase != GamePhase.PLAYING:
+        if self.state.phase != GamePhase.DRAW_PHASE:
             print(f"DEBUG: Cannot draw - phase is {self.state.phase}, not PLAYING")
             return {"success": False, "error": "Game not in playing phase"}
 
@@ -501,20 +502,28 @@ class CaboGame:
             return {"success": False, "error": "Deck is empty"}
 
         self.state.drawn_card = card
+        self.state.phase = GamePhase.CARD_DRAWN  # Transition to card drawn phase
         
-        # Trigger checkpoint to ensure all clients get updated state
-        self._trigger_checkpoint()
+        events = []
+        events.append(GameEvent("card_drawn", {
+            "player_id": message.player_id,
+            "card": str(card)  # Always pass the actual card, orchestrator handles visibility
+        }))
+        events.append(GameEvent("game_phase_changed", {
+            "phase": "card_drawn",
+            "current_player": current_player.player_id
+        }))
         
         return {
             "success": True,
-            "event": GameEvent("card_drawn", {
-                "player_id": message.player_id,
-                "card": str(card)  # Always pass the actual card, orchestrator handles visibility
-            })
+            "events": events
         }
 
     def _handle_play_drawn_card(self, message: PlayDrawnCardMessage) -> Dict[str, Any]:
         """Handle playing the drawn card directly"""
+        if self.state.phase != GamePhase.CARD_DRAWN:
+            return {"success": False, "error": "Must draw a card first"}
+        
         if self.state.drawn_card is None:
             return {"success": False, "error": "No card drawn"}
 
@@ -578,6 +587,9 @@ class CaboGame:
 
     def _handle_replace_and_play(self, message: ReplaceAndPlayMessage) -> Dict[str, Any]:
         """Handle replacing hand card with drawn card and playing the old one"""
+        if self.state.phase != GamePhase.CARD_DRAWN:
+            return {"success": False, "error": "Must draw a card first"}
+        
         if self.state.drawn_card is None:
             return {"success": False, "error": "No card drawn"}
 
@@ -799,8 +811,8 @@ class CaboGame:
 
     def _handle_call_cabo(self, message: CallCaboMessage) -> Dict[str, Any]:
         """Handle Cabo call"""
-        if self.state.phase not in [GamePhase.PLAYING, GamePhase.WAITING_FOR_SPECIAL_ACTION]:
-            return {"success": False, "error": "Cannot call Cabo in current phase"}
+        if self.state.phase != GamePhase.DRAW_PHASE:
+            return {"success": False, "error": "Can only call Cabo at the start of your turn"}
 
         current_player = self.get_current_player()
         if current_player.player_id != message.player_id:
@@ -848,7 +860,7 @@ class CaboGame:
         # Move to next player
         self.state.current_player_index = (
             self.state.current_player_index + 1) % len(self.players)
-        self.state.phase = GamePhase.PLAYING
+        self.state.phase = GamePhase.DRAW_PHASE
 
         self.state.drawn_card = None
         self.state.played_card = None
@@ -894,7 +906,7 @@ class CaboGame:
         if self.state.stack_timer_id:
             self.pending_timeouts.pop(self.state.stack_timer_id, None)
             self.state.stack_timer_id = None
-        self.state.phase = GamePhase.PLAYING
+        self.state.phase = GamePhase.DRAW_PHASE
 
     def _clear_special_action_state(self):
         """Clear special action state"""
@@ -1068,6 +1080,22 @@ class CaboGame:
 
         player.hand[message.own_index] = target_card
         target_player.hand[message.target_index] = player_card
+        
+        # Update visibility tracking for all players who can see the swapped cards
+        for viewer_id in self.state.card_visibility:
+            updated_visibility = []
+            for viewed_player_id, viewed_index in self.state.card_visibility[viewer_id]:
+                # Check if this visibility entry is affected by the swap
+                if viewed_player_id == message.player_id and viewed_index == message.own_index:
+                    # This viewer sees player's card that's now at target location
+                    updated_visibility.append((message.target_player_id, message.target_index))
+                elif viewed_player_id == message.target_player_id and viewed_index == message.target_index:
+                    # This viewer sees target's card that's now at player location
+                    updated_visibility.append((message.player_id, message.own_index))
+                else:
+                    # This visibility entry is not affected by the swap
+                    updated_visibility.append((viewed_player_id, viewed_index))
+            self.state.card_visibility[viewer_id] = updated_visibility
 
         self._clear_special_action_state()
 
@@ -1078,7 +1106,10 @@ class CaboGame:
             "target": target_player.name,
             "target_id": target_player.player_id,
             "player_card": str(player_card),
-            "target_card": str(target_card)
+            "target_card": str(target_card),
+            "player_index": message.own_index,
+            "target_index": message.target_index,
+            "updated_visibility": dict(self.state.card_visibility)  # Send all updated visibilities
         }))
         
         # Transition to next phase (stack or turn transition)
@@ -1195,6 +1226,23 @@ class CaboGame:
 
         player.hand[message.own_index] = target_card
         target_player.hand[message.target_index] = player_card
+        
+        # Update visibility tracking for ALL viewers who can see the swapped cards
+        # This ensures cards remain visible at their new locations
+        for viewer_id in self.state.card_visibility:
+            updated_visibility = []
+            for viewed_player_id, viewed_index in self.state.card_visibility[viewer_id]:
+                # Check if this visibility entry is affected by the swap
+                if viewed_player_id == message.player_id and viewed_index == message.own_index:
+                    # Viewer sees player's card that moved to target location
+                    updated_visibility.append((message.target_player_id, message.target_index))
+                elif viewed_player_id == message.target_player_id and viewed_index == message.target_index:
+                    # Viewer sees target's card that moved to player location
+                    updated_visibility.append((message.player_id, message.own_index))
+                else:
+                    # This visibility entry is not affected by the swap
+                    updated_visibility.append((viewed_player_id, viewed_index))
+            self.state.card_visibility[viewer_id] = updated_visibility
 
         self._clear_king_state()
         self._clear_special_action_state()
@@ -1206,7 +1254,10 @@ class CaboGame:
             "target": target_player.name,
             "target_id": target_player.player_id,
             "player_card": str(player_card),
-            "target_card": str(target_card)
+            "target_card": str(target_card),
+            "player_index": message.own_index,
+            "target_index": message.target_index,
+            "updated_visibility": dict(self.state.card_visibility)  # Send all updated visibilities
         }))
         
         # Transition to next phase (stack or turn transition)
@@ -1279,7 +1330,7 @@ class CaboGame:
         # Choose starting player and transition to PLAYING
         self.state.current_player_index = random.randint(
             0, len(self.players) - 1)
-        self.state.phase = GamePhase.PLAYING
+        self.state.phase = GamePhase.DRAW_PHASE
 
         # Trigger checkpoint for major phase change
         self._trigger_checkpoint()
@@ -1287,7 +1338,7 @@ class CaboGame:
         return {
             "success": True,
             "event": GameEvent("game_phase_changed", {
-                "phase": "playing",
+                "phase": "draw_phase",
                 "current_player": self.get_current_player().player_id,
                 "current_player_name": self.get_current_player().name
             })

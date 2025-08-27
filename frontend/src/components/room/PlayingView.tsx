@@ -37,14 +37,14 @@ export default function PlayingView() {
 
   // Handle clicking the drawn card to play it
   const handleDrawnCardClick = () => {
-    if (drawnCard && isMyTurn && phase === GamePhase.PLAYING) {
+    if (drawnCard && isMyTurn && phase === GamePhase.CARD_DRAWN) {
       sendMessage({ type: 'play_drawn_card' })
     }
   }
 
   // Handle clicking a hand card to replace and play it
   const handleHandCardClick = (cardIndex: number) => {
-    if (drawnCard && isMyTurn && phase === GamePhase.PLAYING) {
+    if (drawnCard && isMyTurn && phase === GamePhase.CARD_DRAWN) {
       sendMessage({
         type: 'replace_and_play',
         hand_index: cardIndex,
@@ -54,7 +54,7 @@ export default function PlayingView() {
 
   // Handle clicking the deck to draw a card
   const handleDeckClick = () => {
-    if (isMyTurn && phase === GamePhase.PLAYING && !drawnCard) {
+    if (isMyTurn && phase === GamePhase.DRAW_PHASE && !drawnCard) {
       sendMessage({ type: 'draw_card' })
     }
   }
@@ -169,7 +169,7 @@ export default function PlayingView() {
             <div
               onClick={handleDeckClick}
               className={`w-16 h-24 bg-blue-600 border-2 border-blue-700 rounded-lg flex items-center justify-center font-bold text-white text-xs shadow-lg ${
-                isMyTurn && phase === GamePhase.PLAYING && !drawnCard
+                isMyTurn && phase === GamePhase.DRAW_PHASE && !drawnCard
                   ? 'cursor-pointer hover:bg-blue-700 hover:border-blue-800 transition-all duration-200 transform hover:scale-105'
                   : 'opacity-50'
               }`}
@@ -223,7 +223,7 @@ export default function PlayingView() {
                 {player.id === sessionId &&
                   drawnCard &&
                   isMyTurn &&
-                  phase === GamePhase.PLAYING && (
+                  phase === GamePhase.CARD_DRAWN && (
                     <div className="text-xs text-blue-600 mt-1">
                       💡 Click a card to replace and play it
                     </div>
@@ -242,7 +242,7 @@ export default function PlayingView() {
                   isCurrentPlayer &&
                   drawnCard &&
                   isMyTurn &&
-                  phase === GamePhase.PLAYING
+                  phase === GamePhase.CARD_DRAWN
                 
                 // Check if this card can be selected for special actions
                 const canSelectForSpecial = isCardSelectable(player.id, cardIndex, sessionId)

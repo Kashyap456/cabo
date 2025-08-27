@@ -41,7 +41,8 @@ export interface PlayerGameState {
 // Match backend game phases
 export enum GamePhase {
   SETUP = 'setup',
-  PLAYING = 'playing',
+  DRAW_PHASE = 'draw_phase',  // Can draw a card or call cabo
+  CARD_DRAWN = 'card_drawn',  // Must play or replace the drawn card
   WAITING_FOR_SPECIAL_ACTION = 'waiting_for_special_action',
   KING_VIEW_PHASE = 'king_view_phase',
   KING_SWAP_PHASE = 'king_swap_phase',
@@ -258,9 +259,9 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   
   canCallStack: () => {
     const state = get()
-    // Can call stack during PLAYING or WAITING_FOR_SPECIAL_ACTION phases
-    // Cannot call stack if already in STACK_CALLED phase
-    return (state.phase === GamePhase.PLAYING || 
+    // Can call stack after a card is played (turn transition or special action phases)
+    // Cannot call stack during draw/play phases or if already in stack phase
+    return (state.phase === GamePhase.TURN_TRANSITION || 
             state.phase === GamePhase.WAITING_FOR_SPECIAL_ACTION ||
             state.phase === GamePhase.KING_VIEW_PHASE ||
             state.phase === GamePhase.KING_SWAP_PHASE) &&

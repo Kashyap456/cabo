@@ -43,7 +43,7 @@ export default function ActionPanel() {
   const canCallCabo = () => {
     // Can only call cabo at the start of turn before drawing
     return isMyTurn && 
-           phase === GamePhase.PLAYING && 
+           phase === GamePhase.DRAW_PHASE && 
            !drawnCard &&
            !players.some(p => p.hasCalledCabo)
   }
@@ -182,7 +182,8 @@ export default function ActionPanel() {
 function getPhaseDisplay(phase: GamePhase): string {
   switch (phase) {
     case GamePhase.SETUP: return 'Setup'
-    case GamePhase.PLAYING: return 'Playing'
+    case GamePhase.DRAW_PHASE: return 'Draw Phase'
+    case GamePhase.CARD_DRAWN: return 'Play Card'
     case GamePhase.WAITING_FOR_SPECIAL_ACTION: return 'Special Action'
     case GamePhase.KING_VIEW_PHASE: return 'King View'
     case GamePhase.KING_SWAP_PHASE: return 'King Swap'

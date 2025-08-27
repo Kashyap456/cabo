@@ -69,8 +69,8 @@ class GameOrchestrator:
             }
         )
         
-        # Create and broadcast initial checkpoint
-        await self._create_checkpoint_async(room_id)
+        # Create and broadcast initial checkpoint so clients have game state
+        await self._create_checkpoint_async(room_id, broadcast=True)
 
         # Start processing messages
         self.processing_tasks[room_id] = asyncio.create_task(
@@ -145,11 +145,9 @@ class GameOrchestrator:
                                 event.data
                             )
                         
-                        # Check if checkpoint is needed (after phase changes)
-                        if game.needs_checkpoint:
-                            game.needs_checkpoint = False  # Clear the flag
-                            # Pass the current game instance to ensure correct state
-                            await self._create_checkpoint_async(room_id, game)
+                        # Always create checkpoint after processing messages
+                        # This ensures reconnecting players get the latest state
+                        await self._create_checkpoint_async(room_id, game)
 
                     # If no messages, wait before next iteration
                     if not messages:
@@ -167,7 +165,7 @@ class GameOrchestrator:
         finally:
             await self.end_game(room_id)
 
-    async def _create_checkpoint_async(self, room_id: str, game=None):
+    async def _create_checkpoint_async(self, room_id: str, game=None, broadcast=False):
         """Create checkpoint when game requests it (phase changes)"""
         try:
             # If no game instance provided, load from Redis (for initial creation)
@@ -183,12 +181,13 @@ class GameOrchestrator:
                 room_id, game, current_seq
             )
             
-            # Publish checkpoint event to stream
-            await self.stream_manager.publish_event(
-                room_id,
-                "checkpoint_created",
-                checkpoint.to_dict()
-            )
+            # Only broadcast initial checkpoint or when explicitly requested
+            if broadcast:
+                await self.stream_manager.publish_event(
+                    room_id,
+                    "checkpoint_created", 
+                    checkpoint.to_dict()
+                )
             
             logger.info(f"Created checkpoint for room {room_id} at phase {game.state.phase.value}")
             
