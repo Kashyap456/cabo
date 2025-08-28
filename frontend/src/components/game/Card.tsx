@@ -23,10 +23,23 @@ export default function Card({
   showValue = false,
 }: CardProps) {
   // Determine card dimensions based on size
-  const sizeClasses = {
-    small: 'w-12 h-18 text-base',
-    medium: 'w-16 h-24 text-xl',
-    large: 'w-20 h-30 text-2xl',
+  // Use the standard size for medium, and scale proportionally for small/large
+  const sizeStyles = {
+    small: {
+      width: `${CARD_SIZES.width * 0.8}rem`,
+      height: `${CARD_SIZES.height * 0.8}rem`,
+      fontSize: '0.875rem',
+    },
+    medium: {
+      width: `${CARD_SIZES.width}rem`,
+      height: `${CARD_SIZES.height}rem`,
+      fontSize: '1.25rem',
+    },
+    large: {
+      width: `${CARD_SIZES.width * 1.2}rem`,
+      height: `${CARD_SIZES.height * 1.2}rem`,
+      fontSize: '1.5rem',
+    },
   }
 
   // Determine if the card is face up
@@ -36,21 +49,26 @@ export default function Card({
   const getSuitSymbol = (suit: string | null | '?') => {
     if (!suit || suit === '?') return ''
     switch (suit.toLowerCase()) {
-      case 'hearts': return '♥'
-      case 'diamonds': return '♦'
-      case 'clubs': return '♣'
-      case 'spades': return '♠'
-      default: return ''
+      case 'hearts':
+        return '♥'
+      case 'diamonds':
+        return '♦'
+      case 'clubs':
+        return '♣'
+      case 'spades':
+        return '♠'
+      default:
+        return ''
     }
   }
 
   // Get rank display
   const getRankDisplay = (rank: string | number | '?') => {
     if (rank === '?' || rank === undefined) return '?'
-    
+
     // Convert string numbers to actual numbers for comparison
     const rankValue = typeof rank === 'string' ? rank.toUpperCase() : rank
-    
+
     switch (rankValue) {
       case 'ACE':
       case 1:
@@ -94,7 +112,6 @@ export default function Card({
 
   // Build card classes
   const cardClasses = `
-    ${sizeClasses[size]}
     ${isFaceUp ? 'bg-white' : 'bg-gradient-to-br from-blue-600 to-blue-700'}
     ${isSelected ? 'ring-4 ring-yellow-400 scale-105' : ''}
     ${isSelectable ? 'cursor-pointer hover:scale-105 hover:shadow-xl' : ''}
@@ -108,12 +125,13 @@ export default function Card({
   `
 
   // Special styling for red kings (worth -1)
-  const isRedKing = (card.rank === 'KING' || card.rank === 13) && 
+  const isRedKing =
+    (card.rank === 'KING' || card.rank === 13) &&
     (card.suit === 'hearts' || card.suit === 'diamonds')
 
   return (
     <div className="relative">
-      <div onClick={onClick} className={cardClasses}>
+      <div onClick={onClick} className={cardClasses} style={sizeStyles[size]}>
         {isFaceUp ? (
           isJoker ? (
             // Special rendering for Joker
@@ -125,7 +143,9 @@ export default function Card({
                 {rankDisplay}
               </div>
               {suitDisplay && (
-                <div className={`-mt-1 ${size === 'large' ? 'text-3xl' : size === 'small' ? 'text-lg' : 'text-2xl'}`}>
+                <div
+                  className={`-mt-1 ${size === 'large' ? 'text-3xl' : size === 'small' ? 'text-lg' : 'text-2xl'}`}
+                >
                   {suitDisplay}
                 </div>
               )}
@@ -139,13 +159,19 @@ export default function Card({
           </div>
         )}
       </div>
-      
+
       {/* Show card value if requested (for endgame) */}
       {showValue && isFaceUp && card.value !== undefined && (
-        <div className={`absolute -bottom-2 left-1/2 transform -translate-x-1/2 
+        <div
+          className={`absolute -bottom-2 left-1/2 transform -translate-x-1/2 
           ${card.value < 0 ? 'bg-green-600' : card.value === 0 ? 'bg-blue-600' : 'bg-gray-800'} 
-          text-white text-xs px-2 py-1 rounded font-medium`}>
-          {card.value > 0 ? `+${card.value}` : card.value === 0 ? '0' : card.value}
+          text-white text-xs px-2 py-1 rounded font-medium`}
+        >
+          {card.value > 0
+            ? `+${card.value}`
+            : card.value === 0
+              ? '0'
+              : card.value}
         </div>
       )}
     </div>

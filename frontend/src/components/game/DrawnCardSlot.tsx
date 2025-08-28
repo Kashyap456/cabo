@@ -10,9 +10,13 @@ interface DrawnCardSlotProps {
   onCardClick?: () => void
 }
 
-const DrawnCardSlot = ({ drawnCard, isCurrentPlayer, onCardClick }: DrawnCardSlotProps) => {
+const DrawnCardSlot = ({
+  drawnCard,
+  isCurrentPlayer,
+  onCardClick,
+}: DrawnCardSlotProps) => {
   return (
-    <div className="relative">
+    <div className="relative w-12 h-18">
       {/* Label for drawn card area */}
       {drawnCard && (
         <motion.div
@@ -23,33 +27,33 @@ const DrawnCardSlot = ({ drawnCard, isCurrentPlayer, onCardClick }: DrawnCardSlo
           {isCurrentPlayer ? 'Your Draw' : 'Drawn Card'}
         </motion.div>
       )}
-      
+
       {/* Card slot */}
-      <div className="relative h-28 w-20">
+      <div className="relative w-card h-card">
         <AnimatePresence mode="wait">
           {drawnCard ? (
             <motion.div
               key="drawn-card"
-              initial={{ 
+              initial={{
                 x: 100, // Start from deck position (to the right)
                 y: 0,
-                scale: 0.8
+                scale: 0.8,
               }}
-              animate={{ 
+              animate={{
                 x: 0,
                 y: 0,
-                scale: 1
+                scale: 1,
               }}
-              exit={{ 
+              exit={{
                 x: 0,
                 y: -100,
                 scale: 0,
-                opacity: 0
+                opacity: 0,
               }}
               transition={{
-                type: "spring",
+                type: 'spring',
                 stiffness: 300,
-                damping: 30
+                damping: 30,
               }}
               className="absolute inset-0 cursor-pointer"
               onClick={isCurrentPlayer ? onCardClick : undefined}
@@ -60,19 +64,18 @@ const DrawnCardSlot = ({ drawnCard, isCurrentPlayer, onCardClick }: DrawnCardSlo
                 value={isCurrentPlayer ? drawnCard.rank : undefined}
                 suit={isCurrentPlayer ? drawnCard.suit : undefined}
                 isFaceDown={!isCurrentPlayer}
-                className="h-28 w-20"
                 isFlipped={false} // Never use the flip that mirrors
               />
             </motion.div>
           ) : (
             // Empty slot placeholder
-            <div className="w-full h-full border-2 border-dashed border-white/20 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-18 border-2 border-dashed border-white/20 rounded-lg flex items-center justify-center text-center">
               <span className="text-white/30 text-xs">Draw Slot</span>
             </div>
           )}
         </AnimatePresence>
       </div>
-      
+
       {/* Hint text for current player */}
       {drawnCard && isCurrentPlayer && (
         <motion.p

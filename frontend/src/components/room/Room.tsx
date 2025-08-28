@@ -2,7 +2,6 @@ import { useEffect } from 'react'
 import { useRoomStore, RoomPhase } from '../../stores/game_state'
 import { useGameWebSocket } from '../../api/game_ws'
 import RoomView from './RoomView'
-import EndGameView from './EndGameView'
 
 interface RoomProps {
   roomCode: string
@@ -53,7 +52,7 @@ export default function Room({ roomCode }: RoomProps) {
       {phase === RoomPhase.ENDED ? (
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-4xl mx-auto">
-            <EndGameView />
+            <p>End Game</p>
           </div>
         </div>
       ) : (

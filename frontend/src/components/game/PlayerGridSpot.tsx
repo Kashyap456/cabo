@@ -2,12 +2,12 @@ import { motion } from 'framer-motion'
 import AnimatedCard from './AnimatedCard'
 import { cn } from '@/lib/utils'
 
-interface PlayerSpotProps {
+interface PlayerGridSpotProps {
   nickname: string
   isHost?: boolean
   isCurrentPlayer?: boolean
   isTurn?: boolean
-  cards?: Array<{ 
+  cards?: Array<{
     value?: number | string
     suit?: string
     isFaceDown: boolean
@@ -28,7 +28,10 @@ interface PlayerSpotProps {
   onCardClick?: (cardIndex: number) => void
 }
 
-const PlayerSpot = ({
+// Cards are laid out in a 2-column flexbox that wraps
+// This creates a natural 2x3 grid for up to 6 cards
+
+const PlayerGridSpot = ({
   nickname,
   isHost = false,
   isCurrentPlayer = false,
@@ -38,19 +41,18 @@ const PlayerSpot = ({
   tableDimensions,
   className,
   onCardClick,
-}: PlayerSpotProps) => {
+}: PlayerGridSpotProps) => {
   const { width: tableWidth, height: tableHeight } = tableDimensions
   const centerX = tableWidth / 2
   const centerY = tableHeight / 2
 
-  // Use provided badge and card positions (they should always be defined now)
+  // Use provided badge and card positions
   const cardX = position.cardX || position.x
   const cardY = position.cardY || position.y
   const badgeX = position.badgeX || position.x
   const badgeY = position.badgeY || position.y
 
-  // Calculate the angle from center (for card orientation)
-  // Cards should face the center, so rotate 180 degrees from the outward angle
+  // Calculate the angle from center (for card container orientation)
   const angleFromCenter =
     Math.atan2(cardY - centerY, cardX - centerX) * (180 / Math.PI) - 90
 
@@ -60,8 +62,23 @@ const PlayerSpot = ({
   const badgeXPercent = (badgeX / tableWidth) * 100
   const badgeYPercent = (badgeY / tableHeight) * 100
 
+  // Card dimensions - w-card = 3.5rem = 56px, h-card = 4.5rem = 72px
+  const cardWidth = 64
+  const cardHeight = 96
+  const cardGap = 8
+
   return (
     <>
+      {/* Debug: Badge position dot */}
+      <div
+        className="absolute w-3 h-3 bg-blue-500 rounded-full z-50"
+        style={{
+          left: `${badgeXPercent}%`,
+          top: `${badgeYPercent}%`,
+          translate: '-50% -50%',
+        }}
+      />
+
       {/* Player name badge - positioned outside table, always readable */}
       <motion.div
         className={cn('absolute flex items-center justify-center', className)}
@@ -102,9 +119,19 @@ const PlayerSpot = ({
         </div>
       </motion.div>
 
-      {/* Cards container - positioned at table edge, rotated to face center */}
+      {/* Debug: Card position dot */}
+      <div
+        className="absolute w-3 h-3 bg-green-500 rounded-full z-50"
+        style={{
+          left: `${cardXPercent}%`,
+          top: `${cardYPercent}%`,
+          translate: '-50% -50%',
+        }}
+      />
+
+      {/* Cards container - grid layout */}
       <motion.div
-        className="absolute flex gap-0.5"
+        className="absolute"
         initial={{ opacity: 0, scale: 0, rotate: angleFromCenter }}
         animate={{
           opacity: 1,
@@ -118,54 +145,67 @@ const PlayerSpot = ({
           translate: '-50% -50%',
         }}
       >
-        {cards.map((card, index) => (
-          <motion.div
-            key={index}
-            className={cn(
-              "relative transition-all duration-200",
-              card.isSelected && "ring-4 ring-yellow-400 rounded-lg",
-              card.isSelectable && !card.isSelected && "hover:ring-2 hover:ring-blue-400 rounded-lg cursor-pointer"
-            )}
-            style={{
-              transform: `rotate(${index * 5 - (cards.length - 1) * 2.5}deg)`,
-              marginLeft: index === 0 ? 0 : '-15px',
-              zIndex: card.isSelected ? 20 : (card.isSelectable ? 10 : 1),
-            }}
-            whileHover={card.isSelectable ? { scale: 1.1, y: -10 } : {}}
-            whileTap={card.isSelectable ? { scale: 0.95 } : {}}
-          >
-            <AnimatedCard
-              value={card.value}
-              suit={card.suit}
-              isFaceDown={card.isFaceDown}
-              className={cn(
-                "h-16 w-11", // 7:5 ratio - height:width
-                card.isSelected && "shadow-2xl",
-                card.isSelectable && "transition-shadow hover:shadow-xl"
-              )}
-              animationDelay={index * 0.1}
-              onClick={onCardClick && card.isSelectable ? () => onCardClick(index) : undefined}
-            />
-            {/* Selection indicator */}
-            {card.isSelected && (
+        {/* Flexbox container for cards - 2x3 grid layout using flex wrap */}
+        <div
+          className="flex flex-wrap justify-center items-center gap-2"
+          style={{
+            width: `${cardWidth * 2 + cardGap}px`,
+          }}
+        >
+          {cards.map((card, index) => {
+            return (
               <motion.div
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="absolute -top-8 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-2 py-1 rounded text-xs font-bold"
+                key={index}
+                className={cn(
+                  'relative transition-all duration-200 w-12 h-18',
+                  card.isSelected && 'ring-4 ring-yellow-400 rounded-lg z-20',
+                  card.isSelectable &&
+                    !card.isSelected &&
+                    'hover:ring-2 hover:ring-blue-400 rounded-lg cursor-pointer',
+                )}
+                style={{
+                  zIndex: card.isSelected ? 20 : card.isSelectable ? 10 : 1,
+                }}
+                initial={{ scale: 0, rotate: 180 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{
+                  delay: index * 0.05,
+                  type: 'spring',
+                  stiffness: 300,
+                  damping: 20,
+                }}
+                whileHover={card.isSelectable ? { scale: 1.1, y: -5 } : {}}
+                whileTap={card.isSelectable ? { scale: 0.95 } : {}}
               >
-                SELECTED
+                <AnimatedCard
+                  value={card.value}
+                  suit={card.suit}
+                  isFaceDown={card.isFaceDown}
+                  className="w-full h-full"
+                  onClick={onCardClick ? () => onCardClick(index) : undefined}
+                />
+                {/* Selection indicator */}
+                {card.isSelected && (
+                  <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="absolute -top-6 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-1.5 py-0.5 rounded text-xs font-bold"
+                  >
+                    SEL
+                  </motion.div>
+                )}
               </motion.div>
-            )}
-          </motion.div>
-        ))}
+            )
+          })}
+        </div>
 
-        {/* Placeholder if no cards - just show empty spot */}
+        {/* Placeholder if no cards */}
         {cards.length === 0 && (
-          <div className="h-16 w-11 border border-dashed border-white/20 rounded" />
+          <div className="h-14 w-11 border border-dashed border-white/20 rounded" />
         )}
       </motion.div>
     </>
   )
 }
 
-export default PlayerSpot
+export default PlayerGridSpot

@@ -7,10 +7,10 @@ import { useGameWebSocket } from '@/api/game_ws'
 import { useSpecialActionHandler } from '@/hooks/useSpecialActionHandler'
 import { useCardVisibility } from '@/hooks/useCardVisibility'
 import GameTable from '../game/GameTable'
-import PlayerSpot from '../game/PlayerSpot'
+import PlayerGridSpot from '../game/PlayerGridSpot'
 import Deck from '../game/Deck'
-import DrawnCardSlot from '../game/DrawnCardSlot'
 import CardSwapAnimation from '../game/CardSwapAnimation'
+import CardReplacementAnimation from '../game/CardReplacementAnimation'
 import WoodButton from '../ui/WoodButton'
 import ActionPanel from './ActionPanel'
 import { calculatePlayerPositions } from '@/utils/tablePositions'
@@ -22,15 +22,25 @@ export default function RoomView() {
   const isHost = useIsHost()
   const { sessionId } = useAuthStore()
   const startGameMutation = useStartGame()
-  
+
   // Game state (only used when in game)
   const gamePlayState = useGamePlayStore()
   const { sendMessage } = useGameWebSocket()
   const { isCardVisible } = useCardVisibility()
-  
+
+  // Track replacement animation state
+  const [replacementAnimation, setReplacementAnimation] = useState<{
+    drawnCard: any
+    replacedIndex: number
+    playerId: string
+  } | null>(null)
+
   // Table dimensions
-  const [tableDimensions, setTableDimensions] = useState({ width: 1000, height: 600 })
-  
+  const [tableDimensions, setTableDimensions] = useState({
+    width: 1000,
+    height: 600,
+  })
+
   // Special action handler for game
   useSpecialActionHandler()
 
@@ -50,73 +60,106 @@ export default function RoomView() {
 
   // Game logic helpers
   const isInGame = roomPhase === RoomPhase.IN_GAME
-  
+
   // Get the actual player list we'll be rendering
   const displayPlayers = isInGame ? gamePlayState.players : players
-  
+
   // Calculate player positions based on the actual players we're showing
-  const currentPlayerIndex = displayPlayers.findIndex(p => p.id === sessionId)
+  const currentPlayerIndex = displayPlayers.findIndex((p) => p.id === sessionId)
   const positions = calculatePlayerPositions(
     displayPlayers.length || 1,
     currentPlayerIndex >= 0 ? currentPlayerIndex : 0,
     tableDimensions.width,
-    tableDimensions.height
+    tableDimensions.height,
   )
-  const currentPlayer = isInGame ? gamePlayState.players.find(p => p.id === sessionId) : null
-  const isMyTurn = isInGame && currentPlayer && currentPlayer.id === gamePlayState.currentPlayerId
+  const currentPlayer = isInGame
+    ? gamePlayState.players.find((p) => p.id === sessionId)
+    : null
+  const isMyTurn =
+    isInGame &&
+    currentPlayer &&
+    currentPlayer.id === gamePlayState.currentPlayerId
   const gamePhase = isInGame ? gamePlayState.phase : null
-  
+
   // Determine if we should show swap animation
   // Only show when we have exactly 2 cards selected during a swap action
-  const shouldShowSwap = isInGame && 
-    (gamePlayState.specialAction?.type === 'SWAP_CARDS' || 
-     gamePlayState.specialAction?.type === 'KING_SWAP') &&
+  const shouldShowSwap =
+    isInGame &&
+    (gamePlayState.specialAction?.type === 'SWAP_CARDS' ||
+      gamePlayState.specialAction?.type === 'KING_SWAP') &&
     gamePlayState.selectedCards.length === 2
 
   // Handle deck click
   const handleDeckClick = () => {
-    if (isMyTurn && gamePhase === GamePhase.DRAW_PHASE && !gamePlayState.drawnCard) {
+    if (
+      isMyTurn &&
+      gamePhase === GamePhase.DRAW_PHASE &&
+      !gamePlayState.drawnCard
+    ) {
       sendMessage({ type: 'draw_card' })
     }
   }
 
   // Handle drawn card actions
   const handleDrawnCardClick = () => {
-    if (gamePlayState.drawnCard && isMyTurn && gamePhase === GamePhase.CARD_DRAWN) {
+    if (
+      gamePlayState.drawnCard &&
+      isMyTurn &&
+      gamePhase === GamePhase.CARD_DRAWN
+    ) {
       sendMessage({ type: 'play_drawn_card' })
     }
   }
 
   // Handle hand card replacement
   const handleHandCardClick = (playerId: string, cardIndex: number) => {
-    const player = isInGame ? gamePlayState.players.find(p => p.id === playerId) : null
+    const player = isInGame
+      ? gamePlayState.players.find((p) => p.id === playerId)
+      : null
     if (!player) return
 
     // Handle replacement when card is drawn
-    if (gamePlayState.drawnCard && isMyTurn && gamePhase === GamePhase.CARD_DRAWN) {
-      sendMessage({
-        type: 'replace_and_play',
-        hand_index: cardIndex,
+    if (
+      gamePlayState.drawnCard &&
+      isMyTurn &&
+      gamePhase === GamePhase.CARD_DRAWN
+    ) {
+      // Trigger the replacement animation
+      setReplacementAnimation({
+        drawnCard: gamePlayState.drawnCard,
+        replacedIndex: cardIndex,
+        playerId: playerId,
       })
+
+      // Send the message after a short delay to sync with animation
+      setTimeout(() => {
+        sendMessage({
+          type: 'replace_and_play',
+          hand_index: cardIndex,
+        })
+      }, 200)
       return
     }
 
     // Handle special actions and stack selection
     if (gamePlayState.isCardSelectable(playerId, cardIndex, sessionId)) {
       gamePlayState.selectCard(playerId, cardIndex)
-      
+
       // Handle stack execution
-      if (gamePhase === GamePhase.STACK_CALLED && gamePlayState.stackCaller?.playerId === sessionId) {
+      if (
+        gamePhase === GamePhase.STACK_CALLED &&
+        gamePlayState.stackCaller?.playerId === sessionId
+      ) {
         if (playerId === sessionId) {
           sendMessage({
             type: 'execute_stack',
-            card_index: cardIndex
+            card_index: cardIndex,
           })
         } else {
           sendMessage({
             type: 'execute_stack',
             card_index: cardIndex,
-            target_player_id: playerId
+            target_player_id: playerId,
           })
         }
       }
@@ -124,18 +167,21 @@ export default function RoomView() {
   }
 
   return (
-    <GameTable showPositionGuides={false}>
+    <GameTable showPositionGuides={true} data-table-container>
       {/* Room info display - always visible */}
       <div className="fixed top-4 right-4 z-20">
-        <div 
+        <div
           className="border-4 border-yellow-500/80 px-4 py-3 rounded-lg shadow-wood-deep"
           style={{
-            background: 'linear-gradient(180deg, #D2B48C 0%, #C19A6B 50%, #D2B48C 100%)',
+            background:
+              'linear-gradient(180deg, #D2B48C 0%, #C19A6B 50%, #D2B48C 100%)',
           }}
         >
           <div className="flex flex-col gap-2">
             <div>
-              <p className="text-wood-darker font-bold text-xs uppercase">Room Code</p>
+              <p className="text-wood-darker font-bold text-xs uppercase">
+                Room Code
+              </p>
               <p className="text-yellow-100 font-black text-xl tracking-wider text-shadow-painted">
                 {roomCode}
               </p>
@@ -158,11 +204,11 @@ export default function RoomView() {
       <div className="absolute inset-0">
         <AnimatePresence mode="wait">
           {displayPlayers.map((player, index) => {
-            const roomPlayer = players.find(p => p.id === player.id)
+            const roomPlayer = players.find((p) => p.id === player.id)
             const cards = isInGame && 'cards' in player ? player.cards : []
-            
+
             return (
-              <PlayerSpot
+              <PlayerGridSpot
                 key={player.id}
                 nickname={player.nickname || roomPlayer?.nickname || 'Unknown'}
                 isHost={roomPlayer?.isHost || false}
@@ -170,12 +216,39 @@ export default function RoomView() {
                 isTurn={isInGame && player.id === gamePlayState.currentPlayerId}
                 position={positions[index]}
                 tableDimensions={tableDimensions}
-                cards={cards.map((card: any) => ({
-                  value: isCardVisible(player.id, cards.indexOf(card), card) ? card.rank : undefined,
-                  suit: isCardVisible(player.id, cards.indexOf(card), card) ? card.suit : undefined,
-                  isFaceDown: !isCardVisible(player.id, cards.indexOf(card), card),
+                cards={cards.map((card: any, cardIndex: number) => ({
+                  value: isCardVisible(player.id, cardIndex, card)
+                    ? card.rank
+                    : undefined,
+                  suit: isCardVisible(player.id, cardIndex, card)
+                    ? card.suit
+                    : undefined,
+                  isFaceDown: !isCardVisible(player.id, cardIndex, card),
+                  isSelected:
+                    isInGame &&
+                    gamePlayState.selectedCards.some(
+                      (s) =>
+                        s.playerId === player.id && s.cardIndex === cardIndex,
+                    ),
+                  isSelectable:
+                    isInGame &&
+                    // Selectable for special actions
+                    (gamePlayState.isCardSelectable(
+                      player.id,
+                      cardIndex,
+                      sessionId,
+                    ) ||
+                      // Selectable for card replacement when it's our turn and we have a drawn card
+                      (player.id === sessionId &&
+                        gamePlayState.drawnCard &&
+                        isMyTurn &&
+                        gamePhase === GamePhase.CARD_DRAWN)),
                 }))}
-                onCardClick={isInGame ? (cardIndex) => handleHandCardClick(player.id, cardIndex) : undefined}
+                onCardClick={
+                  isInGame
+                    ? (cardIndex) => handleHandCardClick(player.id, cardIndex)
+                    : undefined
+                }
               />
             )
           })}
@@ -200,7 +273,8 @@ export default function RoomView() {
                     Waiting for players...
                   </p>
                   <p className="text-white/60 text-sm">
-                    Need at least {2 - players.length} more player{2 - players.length > 1 ? 's' : ''}
+                    Need at least {2 - players.length} more player
+                    {2 - players.length > 1 ? 's' : ''}
                   </p>
                 </div>
               ) : isHost ? (
@@ -229,28 +303,31 @@ export default function RoomView() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="flex items-center gap-8"
+              className="flex items-center justify-center"
             >
-              {/* Drawn card slot (left of deck) - show for everyone when in CARD_DRAWN phase */}
-              <DrawnCardSlot
-                drawnCard={
-                  // Show the actual card if current player drew it
-                  gamePlayState.drawnCard || 
-                  // Show a placeholder card for others when someone has drawn
-                  (gamePhase === GamePhase.CARD_DRAWN && !isMyTurn ? { rank: '?', suit: '?' } : null)
-                }
-                isCurrentPlayer={isMyTurn && !!gamePlayState.drawnCard}
-                onCardClick={handleDrawnCardClick}
-              />
-
-              {/* Deck and Discard Pile */}
+              {/* Deck with integrated drawn card slot and discard pile */}
               <Deck
                 deckCount={50} // TODO: Get from game state
-                discardPile={gamePlayState.topDiscardCard ? [{
-                  value: gamePlayState.topDiscardCard.rank,
-                  suit: gamePlayState.topDiscardCard.suit
-                }] : []}
+                discardPile={
+                  gamePlayState.topDiscardCard
+                    ? [
+                        {
+                          value: gamePlayState.topDiscardCard.rank,
+                          suit: gamePlayState.topDiscardCard.suit,
+                        },
+                      ]
+                    : []
+                }
+                drawnCard={
+                  // Show the actual card if current player drew it
+                  gamePlayState.drawnCard ||
+                  // Show a placeholder card for others when someone has drawn
+                  (gamePhase === GamePhase.CARD_DRAWN && !isMyTurn
+                    ? { rank: '?', suit: '?' }
+                    : null)
+                }
                 onDrawFromDeck={handleDeckClick}
+                onDrawnCardClick={handleDrawnCardClick}
                 isCurrentPlayerTurn={isMyTurn}
               />
             </motion.div>
@@ -269,7 +346,11 @@ export default function RoomView() {
             Special Action in Progress
           </h3>
           <p className="text-yellow-700">
-            {gamePlayState.getPlayerById(gamePlayState.specialAction.playerId)?.nickname} is performing: {gamePlayState.specialAction.type}
+            {
+              gamePlayState.getPlayerById(gamePlayState.specialAction.playerId)
+                ?.nickname
+            }{' '}
+            is performing: {gamePlayState.specialAction.type}
           </p>
         </motion.div>
       )}
@@ -293,16 +374,6 @@ export default function RoomView() {
         <div className="fixed bottom-4 right-4 z-10">
           <ActionPanel />
         </div>
-      )}
-      
-      {/* Card swap animation overlay */}
-      {shouldShowSwap && (
-        <CardSwapAnimation
-          selectedCards={gamePlayState.selectedCards}
-          players={displayPlayers}
-          positions={positions}
-          tableDimensions={tableDimensions}
-        />
       )}
     </GameTable>
   )
