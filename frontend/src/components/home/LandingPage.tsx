@@ -4,33 +4,47 @@ import JoinGameModal from './JoinGameModal'
 import { useAuthStore } from '@/stores/auth'
 import { useState } from 'react'
 import CaboLogo from '@/assets/cabo-logo.png'
+import WoodButton from '@/components/ui/WoodButton'
 
 const LandingPage = () => {
   const { nickname } = useAuthStore()
   const [createGameOpen, setCreateGameOpen] = useState(false)
   const [joinGameOpen, setJoinGameOpen] = useState(false)
+  const [nicknameModalOpen, setNicknameModalOpen] = useState(false)
 
   return (
     <div className="bg-[url('src/assets/cabo-background.png')] bg-cover bg-center h-screen">
-      <NicknameModal open={!nickname} onOpenChange={() => {}} />
+      <NicknameModal
+        open={!nickname || nicknameModalOpen}
+        onOpenChange={setNicknameModalOpen}
+      />
       <CreateGameModal open={createGameOpen} onOpenChange={setCreateGameOpen} />
       <JoinGameModal open={joinGameOpen} onOpenChange={setJoinGameOpen} />
 
       <div className="flex flex-col items-center justify-center h-screen gap-4">
         <img src={CaboLogo} alt="Cabo" className="h-96 mb-8" />
-        <div className="flex gap-4">
-          <button
+        <div className="flex flex-col gap-4 w-96">
+          <WoodButton
             onClick={() => setCreateGameOpen(true)}
-            className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold"
+            variant="large"
+            className="w-full"
           >
             Create Game
-          </button>
-          <button
+          </WoodButton>
+          <WoodButton
             onClick={() => setJoinGameOpen(true)}
-            className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+            variant="large"
+            className="w-full"
           >
             Join Game
-          </button>
+          </WoodButton>
+          <WoodButton
+            onClick={() => setNicknameModalOpen(true)}
+            variant="default"
+            className="w-full"
+          >
+            Change Nickname
+          </WoodButton>
         </div>
       </div>
     </div>
