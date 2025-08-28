@@ -46,17 +46,20 @@ export default function RoomView() {
     return () => window.removeEventListener('resize', updateDimensions)
   }, [])
 
-  // Calculate player positions
-  const currentPlayerIndex = players.findIndex(p => p.id === sessionId)
+  // Game logic helpers
+  const isInGame = roomPhase === RoomPhase.IN_GAME
+  
+  // Get the actual player list we'll be rendering
+  const displayPlayers = isInGame ? gamePlayState.players : players
+  
+  // Calculate player positions based on the actual players we're showing
+  const currentPlayerIndex = displayPlayers.findIndex(p => p.id === sessionId)
   const positions = calculatePlayerPositions(
-    players.length || 1,
+    displayPlayers.length || 1,
     currentPlayerIndex >= 0 ? currentPlayerIndex : 0,
     tableDimensions.width,
     tableDimensions.height
   )
-
-  // Game logic helpers
-  const isInGame = roomPhase === RoomPhase.IN_GAME
   const currentPlayer = isInGame ? gamePlayState.players.find(p => p.id === sessionId) : null
   const isMyTurn = isInGame && currentPlayer && currentPlayer.id === gamePlayState.currentPlayerId
   const gamePhase = isInGame ? gamePlayState.phase : null
@@ -145,7 +148,7 @@ export default function RoomView() {
       {/* Players positioned around the table */}
       <div className="absolute inset-0">
         <AnimatePresence mode="wait">
-          {(isInGame ? gamePlayState.players : players).map((player, index) => {
+          {displayPlayers.map((player, index) => {
             const roomPlayer = players.find(p => p.id === player.id)
             const cards = isInGame && 'cards' in player ? player.cards : []
             

@@ -126,7 +126,7 @@ const PlayerSpot = ({
               value={card.value}
               suit={card.suit}
               isFaceDown={card.isFaceDown}
-              className="w-12 h-16"
+              className="h-16 w-11" // 7:5 ratio - height:width
               animationDelay={index * 0.1}
               onClick={onCardClick ? () => onCardClick(index) : undefined}
             />
@@ -135,7 +135,7 @@ const PlayerSpot = ({
 
         {/* Placeholder if no cards - just show empty spot */}
         {cards.length === 0 && (
-          <div className="w-12 h-16 border border-dashed border-white/20 rounded" />
+          <div className="h-16 w-11 border border-dashed border-white/20 rounded" />
         )}
       </motion.div>
     </>

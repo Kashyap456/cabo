@@ -23,7 +23,7 @@ const AnimatedCard = ({
   className,
   animationDelay = 0,
   position = { x: 0, y: 0 },
-  rotation = 0
+  rotation = 0,
 }: AnimatedCardProps) => {
   const [isAnimatingFlip, setIsAnimatingFlip] = useState(false)
   const [showFace, setShowFace] = useState(!isFaceDown)
@@ -44,44 +44,75 @@ const AnimatedCard = ({
     }
   }, [isFaceDown, showFace])
 
+  const getSuitSymbol = (suit?: string) => {
+    if (!suit) return ''
+    switch (suit.toLowerCase()) {
+      case 'hearts':
+        return '♥'
+      case 'diamonds':
+        return '♦'
+      case 'clubs':
+        return '♣'
+      case 'spades':
+        return '♠'
+      default:
+        return ''
+    }
+  }
+
+  const getSuitColor = () => {
+    if (!suit) return ''
+    const suitLower = suit.toLowerCase()
+    if (suitLower === 'hearts' || suitLower === 'diamonds') {
+      return 'text-red-500'
+    }
+    if (suitLower === 'clubs' || suitLower === 'spades') {
+      return 'text-gray-900'
+    }
+    return ''
+  }
+
   const cardBack = (
-    <div className="w-full h-full bg-gradient-to-br from-blue-800 to-blue-900 border-2 border-white rounded-lg flex items-center justify-center">
-      <div className="w-16 h-20 bg-white/10 rounded border border-white/20" />
+    <div className="w-full h-full bg-gradient-to-br from-blue-600 to-blue-700 border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center shadow-lg">
+      <div className="text-white text-xs font-bold mb-1">CABO</div>
+      <div className="text-white text-2xl">🌴</div>
     </div>
   )
 
   const cardFace = (
-    <div className="w-full h-full bg-white border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center">
-      <span className="text-2xl font-bold text-black">{value}</span>
-      {suit && <span className="text-lg">{suit}</span>}
+    <div
+      className={`w-full h-full bg-white border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center shadow-lg ${getSuitColor()}`}
+    >
+      <div className="font-bold text-xl">{value}</div>
+      {suit && <div className="text-2xl -mt-1">{getSuitSymbol(suit)}</div>}
     </div>
   )
 
   return (
     <motion.div
       className={cn(
-        "w-20 h-28 cursor-pointer preserve-3d",
-        isAnimatingFlip && "pointer-events-none",
-        className
+        'h-28 w-20 cursor-pointer preserve-3d', // 7:5 ratio - height:width
+        isAnimatingFlip && 'pointer-events-none',
+        className,
       )}
-      initial={{ 
-        x: position.x, 
+      initial={{
+        x: position.x,
         y: position.y,
         rotate: rotation,
-        scale: 0
+        scale: 0,
       }}
-      animate={{ 
-        x: position.x, 
+      animate={{
+        x: position.x,
         y: position.y,
         rotate: rotation,
         rotateY: isFlipped ? 180 : 0,
-        scale: 1
+        scale: 1,
       }}
       transition={{
-        type: "spring",
+        type: 'spring',
         stiffness: 300,
         damping: 30,
-        delay: animationDelay
+        delay: animationDelay,
       }}
       onClick={onClick}
       whileHover={{ scale: 1.05 }}
@@ -92,6 +123,7 @@ const AnimatedCard = ({
         {showFace ? (
           <motion.div
             key="face"
+            className="w-full h-full"
             initial={{ rotateY: -90 }}
             animate={{ rotateY: 0 }}
             exit={{ rotateY: 90 }}
@@ -103,6 +135,7 @@ const AnimatedCard = ({
         ) : (
           <motion.div
             key="back"
+            className="w-full h-full"
             initial={{ rotateY: 90 }}
             animate={{ rotateY: 0 }}
             exit={{ rotateY: -90 }}

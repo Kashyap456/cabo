@@ -43,6 +43,15 @@ export default function WaitingView() {
     tableDimensions.width,
     tableDimensions.height
   )
+  
+  // Ensure positions have all required properties
+  const safePositions = positions.map(pos => ({
+    ...pos,
+    cardX: pos.cardX ?? pos.x,
+    cardY: pos.cardY ?? pos.y,
+    badgeX: pos.badgeX ?? pos.x,
+    badgeY: pos.badgeY ?? pos.y
+  }))
 
   return (
     <GameTable>
