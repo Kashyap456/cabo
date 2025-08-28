@@ -44,8 +44,9 @@ const PlayerSpot = ({
   const badgeY = position.badgeY || position.y
 
   // Calculate the angle from center (for card orientation)
+  // Cards should face the center, so rotate 180 degrees from the outward angle
   const angleFromCenter =
-    Math.atan2(cardY - centerY, cardX - centerX) * (180 / Math.PI) + 90
+    Math.atan2(cardY - centerY, cardX - centerX) * (180 / Math.PI) - 90
 
   // Convert to percentages for responsive positioning
   const cardXPercent = (cardX / tableWidth) * 100

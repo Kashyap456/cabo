@@ -9,6 +9,7 @@ import { useCardVisibility } from '@/hooks/useCardVisibility'
 import GameTable from '../game/GameTable'
 import PlayerSpot from '../game/PlayerSpot'
 import Deck from '../game/Deck'
+import DrawnCardSlot from '../game/DrawnCardSlot'
 import WoodButton from '../ui/WoodButton'
 import ActionPanel from './ActionPanel'
 import { calculatePlayerPositions } from '@/utils/tablePositions'
@@ -220,8 +221,20 @@ export default function RoomView() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="flex flex-col items-center gap-6"
+              className="flex items-center gap-8"
             >
+              {/* Drawn card slot (left of deck) - show for everyone when in CARD_DRAWN phase */}
+              <DrawnCardSlot
+                drawnCard={
+                  // Show the actual card if current player drew it
+                  gamePlayState.drawnCard || 
+                  // Show a placeholder card for others when someone has drawn
+                  (gamePhase === GamePhase.CARD_DRAWN && !isMyTurn ? { rank: '?', suit: '?' } : null)
+                }
+                isCurrentPlayer={isMyTurn && !!gamePlayState.drawnCard}
+                onCardClick={handleDrawnCardClick}
+              />
+
               {/* Deck and Discard Pile */}
               <Deck
                 deckCount={50} // TODO: Get from game state
@@ -232,22 +245,6 @@ export default function RoomView() {
                 onDrawFromDeck={handleDeckClick}
                 isCurrentPlayerTurn={isMyTurn}
               />
-
-              {/* Drawn card (shown separately when player has drawn) */}
-              {gamePlayState.drawnCard && isMyTurn && (
-                <motion.div
-                  initial={{ x: -100, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  className="absolute top-32 bg-green-50 border-2 border-green-400 rounded-lg p-2"
-                  onClick={handleDrawnCardClick}
-                >
-                  <p className="text-xs text-green-700 mb-1">Drawn Card</p>
-                  <div className="text-lg font-bold">
-                    {gamePlayState.drawnCard.rank} {gamePlayState.drawnCard.suit}
-                  </div>
-                  <p className="text-xs text-green-600 mt-1">Click to play</p>
-                </motion.div>
-              )}
             </motion.div>
           )}
         </AnimatePresence>
