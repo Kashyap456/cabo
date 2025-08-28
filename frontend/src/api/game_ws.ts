@@ -879,16 +879,6 @@ export const useGameWebSocket = () => {
     setIsReady
   } = useRoomStore()
   
-  const {
-    setCurrentPlayer,
-    setPhase: setGamePhase,
-    setPlayers: setGamePlayers,
-    addCardToDiscard,
-    setDrawnCard,
-    setSpecialAction,
-    setStackCaller
-  } = useGamePlayStore()
-  
   const socketUrl = import.meta.env.VITE_WS_URL || 'wss://cabo.kashyap.ch/ws'
 
   const {
@@ -973,99 +963,6 @@ export const useGameWebSocket = () => {
         setIsReady(true)
         break
       }
-      
-      case 'game_checkpoint': {
-        const checkpoint = message as GameCheckpointMessage
-        console.log('Received game checkpoint')
-        
-        // Apply checkpoint state with visibility filtering
-        const currentUserId = useAuthStore.getState().sessionId
-        const gameState = checkpoint.game_state
-        
-        // Process players with visibility filtering
-        const players = gameState.players.map(player => {
-          const cards = player.cards.map((card, index) => {
-            // Check if current user can see this card
-            const visibleCards = gameState.card_visibility?.[currentUserId] || []
-            const canSee = visibleCards.some((visibility) => {
-              // Handle both array and object formats
-              if (Array.isArray(visibility)) {
-                const [targetId, cardIdx] = visibility
-                return targetId === player.id && cardIdx === index
-              } else {
-                return visibility.player_id === player.id && visibility.card_index === index
-              }
-            })
-            
-            // During setup phase, players can see their first 2 cards
-            const isOwnCard = player.id === currentUserId
-            const isSetupPhase = gameState.phase === 'setup'
-            const isSetupVisible = isOwnCard && isSetupPhase && index < 2
-            
-            // Keep the actual card data, just update visibility flag
-            return {
-              id: card.id,
-              rank: card.rank,
-              suit: card.suit,
-              isTemporarilyViewed: canSee || isSetupVisible
-            }
-          })
-          
-          return {
-            id: player.id,
-            nickname: player.name,
-            cards,
-            hasCalledCabo: player.has_called_cabo
-          }
-        })
-        
-        // Apply game state
-        setPlayers(players)
-        setCurrentPlayer(gameState.current_player || '')
-        setPhase(gameState.phase as GamePhase)
-        
-        // Set drawn card if exists and belongs to current player
-        if (gameState.drawn_card && gameState.current_player === currentUserId) {
-          setDrawnCard(parseCardString(gameState.drawn_card))
-        } else {
-          setDrawnCard(null)
-        }
-        
-        // Set discard pile
-        if (gameState.discard_top) {
-          addCardToDiscard(parseCardString(gameState.discard_top))
-        }
-        
-        // Set special action with proper type conversion
-        if (gameState.special_action_player && gameState.special_action_type) {
-          setSpecialAction({
-            type: convertSpecialActionType(gameState.special_action_type),
-            playerId: gameState.special_action_player
-          })
-        } else {
-          setSpecialAction(null)
-        }
-        
-        // Set stack caller
-        if (gameState.stack_caller) {
-          setStackCaller(gameState.stack_caller)
-        } else {
-          setStackCaller(null)
-        }
-        
-        // Set cabo caller
-        if (gameState.cabo_caller) {
-          setCalledCabo(gameState.cabo_caller, true)
-        }
-        
-        // Update room state
-        // Update room phase using the room store
-        useRoomStore.getState().setPhase(RoomPhase.IN_GAME)
-        
-        break
-      }
-      
-      // room_in_game_state removed - handled by game_checkpoint above
       
       case 'game_event': {
         const gameEvent = message as GameEventMessage

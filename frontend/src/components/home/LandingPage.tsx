@@ -3,6 +3,7 @@ import CreateGameModal from './CreateGameModal'
 import JoinGameModal from './JoinGameModal'
 import { useAuthStore } from '@/stores/auth'
 import { useState } from 'react'
+import CaboLogo from '@/assets/cabo-logo.png'
 
 const LandingPage = () => {
   const { nickname } = useAuthStore()
@@ -10,13 +11,13 @@ const LandingPage = () => {
   const [joinGameOpen, setJoinGameOpen] = useState(false)
 
   return (
-    <div>
+    <div className="bg-[url('src/assets/cabo-background.png')] bg-cover bg-center h-screen">
       <NicknameModal open={!nickname} onOpenChange={() => {}} />
       <CreateGameModal open={createGameOpen} onOpenChange={setCreateGameOpen} />
       <JoinGameModal open={joinGameOpen} onOpenChange={setJoinGameOpen} />
-      
+
       <div className="flex flex-col items-center justify-center h-screen gap-4">
-        <h1 className="text-4xl font-bold text-gray-800 mb-8">Cabo</h1>
+        <img src={CaboLogo} alt="Cabo" className="h-96 mb-8" />
         <div className="flex gap-4">
           <button
             onClick={() => setCreateGameOpen(true)}
