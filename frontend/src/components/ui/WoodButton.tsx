@@ -52,7 +52,7 @@ const WoodButton = forwardRef<HTMLButtonElement, WoodButtonProps>(
         
         {/* Painted text effect */}
         <span className={cn(
-          "relative z-10",
+          "relative",
           "text-yellow-100",
           "font-black uppercase tracking-wider",
           // Painted effect with multiple shadows

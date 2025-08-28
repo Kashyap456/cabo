@@ -56,50 +56,63 @@ const JoinGameModal = ({ open, onOpenChange }: JoinGameModalProps) => {
     <>
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg w-96">
-          <Dialog.Title className="text-lg font-semibold mb-4">
-            Join Game
-          </Dialog.Title>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label
-                htmlFor="roomCode"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Room Code
-              </label>
+        <Dialog.Overlay className="fixed inset-0 bg-black/60" />
+        <Dialog.Content 
+          className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 border-4 border-yellow-500/80 p-8 rounded-lg shadow-wood-deep w-96 overflow-hidden"
+          style={{
+            background: 'linear-gradient(180deg, #D2B48C 0%, #C19A6B 50%, #D2B48C 100%)',
+          }}
+        >
+          {/* Wood grain texture overlay */}
+          <div className="absolute inset-0 opacity-40 pointer-events-none wood-texture" />
+          
+          <div className="relative">
+            <Dialog.Title className="text-2xl font-black text-yellow-100 mb-4 text-center uppercase tracking-wider text-shadow-painted">
+              Join Game
+            </Dialog.Title>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="roomCode"
+                  className="block text-sm font-bold text-wood-darker mb-1 uppercase tracking-wide"
+                >
+                  Room Code
+                </label>
               <input
                 id="roomCode"
                 type="text"
                 value={roomCode}
                 onChange={handleRoomCodeChange}
                 placeholder="ABC123"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-center text-lg font-mono tracking-wider"
+                className="w-full px-3 py-2 bg-white border-3 border-wood-dark rounded text-wood-darker font-bold shadow-wood-inset focus:outline-none focus:border-yellow-500/80 focus:shadow-gold-glow text-center text-lg font-mono tracking-wider"
                 autoFocus
                 maxLength={6}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Enter the 6-character room code
-              </p>
+                <p className="text-xs text-wood-medium mt-1 text-center">
+                  Enter the 6-character room code
+                </p>
             </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={roomCode.length !== 6 || isPending}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isPending ? 'Joining...' : 'Join Game'}
-              </button>
-            </div>
-          </form>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  className="flex-1 px-4 py-2 border-4 border-wood-dark bg-wood-medium text-yellow-100 font-bold uppercase rounded shadow-wood-inset hover:bg-wood-dark hover:scale-105 hover:shadow-wood-raised active:scale-95 transition-all duration-200 text-shadow-dark"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={roomCode.length !== 6 || isPending}
+                  className="flex-1 px-4 py-2 border-4 border-yellow-500/80 text-yellow-100 font-black uppercase tracking-wider rounded shadow-wood-deep hover:shadow-button-hover hover:border-yellow-400 hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-shadow-painted"
+                  style={{
+                    background: 'linear-gradient(180deg, #B45309 0%, #92400E 50%, #78350F 100%)',
+                  }}
+                >
+                  {isPending ? 'Joining...' : 'Join Game'}
+                </button>
+              </div>
+            </form>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

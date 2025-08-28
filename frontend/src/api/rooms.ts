@@ -27,7 +27,8 @@ export const useCreateGame = () => {
     },
     onError: (error: any) => {
       if (error.response?.status === 409) {
-        setConflictError(error.response.data)
+        // Backend returns error data under 'detail' property
+        setConflictError(error.response.data.detail || error.response.data)
       }
     }
   })
@@ -52,7 +53,8 @@ export const useJoinGame = () => {
     },
     onError: (error: any) => {
       if (error.response?.status === 409) {
-        setConflictError(error.response.data)
+        // Backend returns error data under 'detail' property
+        setConflictError(error.response.data.detail || error.response.data)
       }
     }
   })
