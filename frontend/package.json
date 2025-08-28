@@ -20,6 +20,7 @@
     "@tanstack/react-router-devtools": "^1.131.5",
     "@tanstack/router-plugin": "^1.121.2",
     "axios": "^1.11.0",
+    "framer-motion": "^12.23.12",
     "js-cookie": "^3.0.5",
     "radix-ui": "^1.4.3",
     "react": "^19.0.0",

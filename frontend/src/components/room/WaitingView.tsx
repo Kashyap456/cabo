@@ -1,80 +1,146 @@
 import { useRoomStore, useIsHost } from '../../stores/game_state'
 import { useAuthStore } from '../../stores/auth'
 import { useStartGame } from '../../api/rooms'
+import GameTable from '../game/GameTable'
+import PlayerSpot from '../game/PlayerSpot'
+import WoodButton from '../ui/WoodButton'
+import { calculatePlayerPositions } from '@/utils/tablePositions'
+import { useEffect, useState, useRef } from 'react'
 
 export default function WaitingView() {
   const { players, roomCode } = useRoomStore()
   const isHost = useIsHost()
-  const { nickname: currentNickname } = useAuthStore()
+  const { sessionId } = useAuthStore()
   const startGameMutation = useStartGame()
+  const tableRef = useRef<HTMLDivElement>(null)
+  const [tableDimensions, setTableDimensions] = useState({ width: 1000, height: 600 })
+
+  useEffect(() => {
+    const updateDimensions = () => {
+      // Calculate table dimensions based on viewport
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      
+      // Match the CSS: w-[85vw] h-[75vh] max-w-[1200px] max-h-[700px]
+      const width = Math.min(vw * 0.85, 1200)
+      const height = Math.min(vh * 0.75, 700)
+      
+      setTableDimensions({ width, height })
+    }
+
+    updateDimensions()
+    window.addEventListener('resize', updateDimensions)
+    return () => window.removeEventListener('resize', updateDimensions)
+  }, [])
+
+  // Find current player index
+  const currentPlayerIndex = players.findIndex(p => p.id === sessionId)
+  
+  // Use actual table dimensions for positioning
+  const positions = calculatePlayerPositions(
+    players.length || 1, 
+    currentPlayerIndex >= 0 ? currentPlayerIndex : 0,
+    tableDimensions.width,
+    tableDimensions.height
+  )
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold mb-4">Players ({players.length})</h2>
-        <div className="space-y-3">
-          {players.map((player) => (
-            <div
-              key={player.id}
-              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-medium">
-                  {player.nickname.charAt(0).toUpperCase()}
-                </div>
-                <span className="font-medium">{player.nickname}</span>
-                <div className="flex gap-2">
-                  {player.nickname === currentNickname && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                      You
-                    </span>
-                  )}
-                  {player.isHost && (
-                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-                      Host
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+    <GameTable>
+      {/* Room info display - top right corner, outside table area */}
+      <div className="fixed top-4 right-4 z-20">
+        <div 
+          className="border-4 border-yellow-500/80 px-4 py-3 rounded-lg shadow-wood-deep"
+          style={{
+            background: 'linear-gradient(180deg, #D2B48C 0%, #C19A6B 50%, #D2B48C 100%)',
+          }}
+        >
+          <div className="flex flex-col gap-2">
+            <div>
+              <p className="text-wood-darker font-bold text-xs uppercase">Room Code</p>
+              <p className="text-yellow-100 font-black text-xl tracking-wider text-shadow-painted">
+                {roomCode}
+              </p>
             </div>
-          ))}
-          {players.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <p>Waiting for players to join...</p>
+            <div className="border-t-2 border-wood-medium pt-2">
+              <p className="text-yellow-100 font-bold text-sm">
+                {players.length} / 8 Players
+              </p>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-semibold mb-3">Game Settings</h3>
-        <div className="space-y-2 text-sm text-gray-600">
-          <p>" Minimum players: 2</p>
-          <p>" Maximum players: 8</p>
-          <p>" Game type: Standard Cabo</p>
-        </div>
+      {/* Players positioned around the table */}
+      <div className="absolute inset-0">
+        {players.map((player, index) => (
+          <PlayerSpot
+            key={player.id}
+            nickname={player.nickname}
+            isHost={player.isHost}
+            isCurrentPlayer={player.id === sessionId}
+            position={positions[index]}
+            tableDimensions={tableDimensions}
+            cards={[]} // No cards in waiting room
+          />
+        ))}
+        
+        {/* Debug dots to show calculated positions */}
+        {positions.map((pos, index) => {
+          console.log(`Debug dot ${index}: cardX=${pos.cardX}, cardY=${pos.cardY}, tableWidth=${tableDimensions.width}, tableHeight=${tableDimensions.height}`)
+          return (
+            <div key={`debug-${index}`}>
+              {/* Card position (inner ellipse) - green dot */}
+              <div 
+                className="absolute w-3 h-3 bg-green-500 rounded-full z-50"
+                style={{
+                  left: `${(pos.cardX / tableDimensions.width) * 100}%`,
+                  top: `${(pos.cardY / tableDimensions.height) * 100}%`,
+                  transform: 'translate(-50%, -50%)'
+                }}
+              />
+              {/* Badge position (outside table) - yellow dot */}
+              <div 
+                className="absolute w-3 h-3 bg-yellow-500 rounded-full z-50"
+                style={{
+                  left: `${(pos.badgeX / tableDimensions.width) * 100}%`,
+                  top: `${(pos.badgeY / tableDimensions.height) * 100}%`,
+                  transform: 'translate(-50%, -50%)'
+                }}
+              />
+            </div>
+          )
+        })}
       </div>
 
-      {isHost && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold mb-3">Host Controls</h3>
-          <button
-            disabled={players.length < 2 || startGameMutation.isPending}
+      {/* Center content - waiting message or start button */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+        {players.length < 2 ? (
+          <div className="text-center">
+            <p className="text-white/80 text-lg font-semibold mb-2">
+              Waiting for players...
+            </p>
+            <p className="text-white/60 text-sm">
+              Need at least {2 - players.length} more player{2 - players.length > 1 ? 's' : ''}
+            </p>
+          </div>
+        ) : isHost ? (
+          <WoodButton
+            variant="large"
             onClick={() => startGameMutation.mutate(roomCode)}
-            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
+            disabled={startGameMutation.isPending}
+            className="min-w-[200px]"
           >
-            {startGameMutation.isPending ? 'Starting...' : 
-             players.length < 2 ? 'Need at least 2 players' : 'Start Game'}
-          </button>
-        </div>
-      )}
+            {startGameMutation.isPending ? 'Starting...' : 'Start Game'}
+          </WoodButton>
+        ) : (
+          <div className="text-center">
+            <p className="text-white/80 text-lg font-semibold">
+              Waiting for host to start
+            </p>
+          </div>
+        )}
+      </div>
 
-      {!isHost && (
-        <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <p className="text-gray-600">Waiting for host to start the game...</p>
-        </div>
-      )}
-    </div>
+    </GameTable>
   )
 }
