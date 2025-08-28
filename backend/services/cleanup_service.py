@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -89,8 +90,9 @@ class CleanupService:
         try:
             await redis_manager.ensure_connected()
             redis = redis_manager.redis
-            threshold_time = datetime.utcnow() - self.inactivity_threshold
-            threshold_ms = int(threshold_time.timestamp() * 1000)
+            # Use time.time() to get proper UTC timestamp
+            current_time_ms = int(time.time() * 1000)
+            threshold_ms = current_time_ms - int(self.inactivity_threshold.total_seconds() * 1000)
 
             # Check all game streams for activity
             cursor = 0
@@ -301,6 +303,6 @@ class CleanupService:
 
 # Global instance
 cleanup_service = CleanupService(
-    cleanup_interval_seconds=30,  # Check every 30 seconds
-    inactivity_threshold_minutes=2.0  # Clean up games inactive for 2+ minutes
+    cleanup_interval_seconds=120,  # Check every 2 minutes
+    inactivity_threshold_minutes=10.0  # Clean up games inactive for 10+ minutes
 )
