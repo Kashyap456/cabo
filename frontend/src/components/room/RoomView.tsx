@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useRoomStore, useIsHost, RoomPhase } from '../../stores/game_state'
 import { useAuthStore } from '../../stores/auth'
 import { useStartGame } from '../../api/rooms'
@@ -10,6 +10,7 @@ import GameTable from '../game/GameTable'
 import PlayerSpot from '../game/PlayerSpot'
 import Deck from '../game/Deck'
 import DrawnCardSlot from '../game/DrawnCardSlot'
+import CardSwapAnimation from '../game/CardSwapAnimation'
 import WoodButton from '../ui/WoodButton'
 import ActionPanel from './ActionPanel'
 import { calculatePlayerPositions } from '@/utils/tablePositions'
@@ -64,6 +65,13 @@ export default function RoomView() {
   const currentPlayer = isInGame ? gamePlayState.players.find(p => p.id === sessionId) : null
   const isMyTurn = isInGame && currentPlayer && currentPlayer.id === gamePlayState.currentPlayerId
   const gamePhase = isInGame ? gamePlayState.phase : null
+  
+  // Determine if we should show swap animation
+  // Only show when we have exactly 2 cards selected during a swap action
+  const shouldShowSwap = isInGame && 
+    (gamePlayState.specialAction?.type === 'SWAP_CARDS' || 
+     gamePlayState.specialAction?.type === 'KING_SWAP') &&
+    gamePlayState.selectedCards.length === 2
 
   // Handle deck click
   const handleDeckClick = () => {
@@ -280,11 +288,21 @@ export default function RoomView() {
         </motion.div>
       )}
 
-      {/* Action Panel - for current player during game */}
+      {/* Action Panel - bottom right corner, below player badges */}
       {isInGame && currentPlayer && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30">
+        <div className="fixed bottom-4 right-4 z-10">
           <ActionPanel />
         </div>
+      )}
+      
+      {/* Card swap animation overlay */}
+      {shouldShowSwap && (
+        <CardSwapAnimation
+          selectedCards={gamePlayState.selectedCards}
+          players={displayPlayers}
+          positions={positions}
+          tableDimensions={tableDimensions}
+        />
       )}
     </GameTable>
   )

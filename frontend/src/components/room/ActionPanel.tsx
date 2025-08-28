@@ -88,92 +88,102 @@ export default function ActionPanel() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4">
-      <h3 className="text-lg font-semibold mb-4">Actions</h3>
-
-      {/* Main action buttons */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+    <div 
+      className="rounded-lg border-2 border-yellow-600/60 p-3"
+      style={{
+        background: 'linear-gradient(180deg, rgba(139, 69, 19, 0.95) 0%, rgba(101, 67, 33, 0.95) 100%)',
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+      }}
+    >
+      <div className="flex flex-col gap-2">
+        
+        {/* Action buttons with wood/casino styling */}
         <button
           onClick={handleStack}
           disabled={!canCallStack()}
-          className={`px-4 py-3 rounded-lg font-medium transition-all ${
+          className={`relative px-8 py-2 rounded-lg font-black text-sm tracking-wider transition-all transform ${
             canCallStack()
-              ? 'bg-orange-600 text-white hover:bg-orange-700 shadow-lg'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              ? 'hover:scale-105 hover:-translate-y-0.5'
+              : 'cursor-not-allowed opacity-40'
           }`}
+          style={{
+            background: canCallStack() 
+              ? 'linear-gradient(180deg, #FF8C00 0%, #FF6F00 50%, #E65100 100%)'
+              : 'linear-gradient(180deg, #424242 0%, #303030 100%)',
+            boxShadow: canCallStack() 
+              ? '0 4px 15px rgba(255, 140, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
+              : 'none',
+            border: '2px solid rgba(0, 0, 0, 0.2)',
+            textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+          }}
         >
-          Stack
+          <span className="text-white">STACK</span>
         </button>
 
         <button
           onClick={handleSkip}
           disabled={!canSkip()}
-          className={`px-4 py-3 rounded-lg font-medium transition-all ${
+          className={`relative px-8 py-2 rounded-lg font-black text-sm tracking-wider transition-all transform ${
             canSkip()
-              ? 'bg-yellow-600 text-white hover:bg-yellow-700 shadow-lg'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              ? 'hover:scale-105 hover:-translate-y-0.5'
+              : 'cursor-not-allowed opacity-40'
           }`}
+          style={{
+            background: canSkip() 
+              ? 'linear-gradient(180deg, #FFD700 0%, #FFC107 50%, #FFA000 100%)'
+              : 'linear-gradient(180deg, #424242 0%, #303030 100%)',
+            boxShadow: canSkip() 
+              ? '0 4px 15px rgba(255, 215, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
+              : 'none',
+            border: '2px solid rgba(0, 0, 0, 0.2)',
+            textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+          }}
         >
-          Skip
+          <span className={canSkip() ? 'text-amber-900' : 'text-white'}>SKIP</span>
         </button>
 
         <button
           onClick={handleCabo}
           disabled={!canCallCabo()}
-          className={`px-4 py-3 rounded-lg font-medium transition-all ${
+          className={`relative px-10 py-2 rounded-lg font-black text-sm tracking-wider transition-all transform ${
             canCallCabo()
-              ? 'bg-red-600 text-white hover:bg-red-700 shadow-lg'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              ? 'hover:scale-110 hover:-translate-y-0.5 animate-pulse'
+              : 'cursor-not-allowed opacity-40'
           }`}
+          style={{
+            background: canCallCabo() 
+              ? 'linear-gradient(180deg, #DC143C 0%, #B71C1C 50%, #8B0000 100%)'
+              : 'linear-gradient(180deg, #424242 0%, #303030 100%)',
+            boxShadow: canCallCabo() 
+              ? '0 4px 20px rgba(220, 20, 60, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
+              : 'none',
+            border: '2px solid rgba(0, 0, 0, 0.3)',
+            textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
+          }}
         >
-          Cabo!
+          <span className="text-white text-base">CABO!</span>
+          {canCallCabo() && (
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+          )}
         </button>
+
+        {/* Stack selection indicator */}
+        {phase === GamePhase.STACK_CALLED && stackCaller?.playerId === sessionId && (
+          <div 
+            className="ml-4 px-4 py-1.5 rounded-lg border-2 border-yellow-400/60"
+            style={{
+              background: 'rgba(255, 193, 7, 0.1)',
+            }}
+          >
+            <span className="text-yellow-300 text-sm font-bold animate-pulse">
+              SELECT A CARD
+            </span>
+          </div>
+        )}
       </div>
-
-      {/* Stack selection mode indicator */}
-      {phase === GamePhase.STACK_CALLED && stackCaller?.playerId === sessionId && (
-        <div className="mb-4 p-3 bg-orange-100 border-2 border-orange-400 rounded-lg">
-          <p className="text-sm font-medium text-orange-800">
-            Select a card to stack (yours or an opponent's)
-          </p>
-        </div>
-      )}
-
-      {/* Stack caller display */}
-      {stackCaller && (
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-          <p className="text-sm font-semibold text-blue-900">
-            Stack Called By: {stackCaller.nickname} {stackCaller.playerId === sessionId && '(You)'}
-          </p>
-          {/* Show additional info if stack was called during a special action */}
-          {(phase === GamePhase.WAITING_FOR_SPECIAL_ACTION || 
-            phase === GamePhase.KING_VIEW_PHASE || 
-            phase === GamePhase.KING_SWAP_PHASE) && (
-            <p className="text-xs text-blue-700 mt-1">
-              Stack winner will select after the current action completes
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Phase and Turn Info */}
-      <div className="p-3 bg-gray-50 rounded-lg">
-        <div className="text-sm text-gray-600 space-y-1">
-          <p><span className="font-medium">Phase:</span> {getPhaseDisplay(phase)}</p>
-          <p><span className="font-medium">Current Player:</span> {
-            isMyTurn ? 'Your Turn' : players.find(p => p.id === currentPlayerId)?.nickname || 'Unknown'
-          }</p>
-          {drawnCard && isMyTurn && (
-            <p className="text-green-600 font-medium">Card drawn - Play or Replace</p>
-          )}
-          {specialAction && (
-            <p className="text-purple-600 font-medium">
-              Special Action: {getSpecialActionDisplay(specialAction.type)}
-            </p>
-          )}
-        </div>
-      </div>
-
     </div>
   )
 }
