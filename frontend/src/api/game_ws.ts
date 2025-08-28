@@ -886,7 +886,7 @@ export const useGameWebSocket = () => {
     setStackCaller
   } = useGamePlayStore()
   
-  const socketUrl = 'ws://localhost:8000/ws'
+  const socketUrl = import.meta.env.VITE_WS_URL || 'wss://cabo.kashyap.ch/ws'
 
   const {
     sendMessage,

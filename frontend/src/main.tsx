@@ -56,5 +56,5 @@ if (rootElement && !rootElement.innerHTML) {
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals()
 
-axios.defaults.baseURL = 'http://localhost:8000/api'
+axios.defaults.baseURL = import.meta.env.VITE_API_BASE_URL || 'https://cabo.kashyap.ch/api'
 axios.defaults.withCredentials = true
