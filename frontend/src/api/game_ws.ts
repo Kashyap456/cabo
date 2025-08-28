@@ -431,11 +431,12 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         }
         
         if (target && gameEvent.data.given_card) {
-          // Add card to target (create unknown card since we don't know the details)
+          // Parse and add the given card to target
+          const parsedCard = parseCardString(gameEvent.data.given_card)
           const newCard = {
-            id: `${gameEvent.data.target_id}_${target.cards.length}_${Date.now()}`,
-            rank: '?',
-            suit: '?'
+            ...parsedCard,
+            id: `${gameEvent.data.target_id}_${target.cards.length}`,
+            isTemporarilyViewed: false
           } as GameCard
           const updatedTargetCards = [...target.cards, newCard]
           updatePlayerCards(gameEvent.data.target_id, updatedTargetCards)
@@ -448,16 +449,17 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'stack_failed': {
-      console.log('Stack failed by:', gameEvent.data.player)
+      console.log('Stack failed by:', gameEvent.data.player, 'penalty:', gameEvent.data.penalty_card)
       
       // Player drew a penalty card
       const player = getPlayerById(gameEvent.data.player_id)
       if (player && gameEvent.data.penalty_card) {
-        // Add the penalty card as an unknown card
+        // Parse the penalty card from backend
+        const parsedCard = parseCardString(gameEvent.data.penalty_card)
         const penaltyCard = {
-          id: `${gameEvent.data.player_id}_${player.cards.length}_${Date.now()}`,
-          rank: '?',
-          suit: '?'
+          ...parsedCard,
+          id: `${gameEvent.data.player_id}_${player.cards.length}`,
+          isTemporarilyViewed: false
         } as GameCard
         const updatedCards = [...player.cards, penaltyCard]
         updatePlayerCards(gameEvent.data.player_id, updatedCards)
@@ -469,16 +471,17 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'stack_timeout': {
-      console.log('Stack timed out for:', gameEvent.data.player)
+      console.log('Stack timed out for:', gameEvent.data.player, 'penalty:', gameEvent.data.penalty_card)
       
       // Player who timed out gets a penalty card
       const player = getPlayerById(gameEvent.data.player_id)
       if (player && gameEvent.data.penalty_card) {
-        // Add the penalty card as an unknown card
+        // Parse the penalty card from backend
+        const parsedCard = parseCardString(gameEvent.data.penalty_card)
         const penaltyCard = {
-          id: `${gameEvent.data.player_id}_${player.cards.length}_${Date.now()}`,
-          rank: '?',
-          suit: '?'
+          ...parsedCard,
+          id: `${gameEvent.data.player_id}_${player.cards.length}`,
+          isTemporarilyViewed: false
         } as GameCard
         const updatedCards = [...player.cards, penaltyCard]
         updatePlayerCards(gameEvent.data.player_id, updatedCards)
@@ -939,8 +942,16 @@ export const useGameWebSocket = () => {
   const handleMessage = useCallback((message: WebSocketMessage) => {
     console.log('Received WebSocket message:', message.type)
     
-    // Update sequence number if present
+    // Handle sequence number deduplication
     if (message.seq_num !== undefined) {
+      const currentSeq = useRoomStore.getState().currentSeq
+      
+      // Skip duplicate messages (same or older sequence number)
+      if (message.seq_num <= currentSeq) {
+        console.log(`Skipping duplicate message with seq_num ${message.seq_num} (current: ${currentSeq})`)
+        return
+      }
+      
       setCurrentSeq(message.seq_num)
     }
     
