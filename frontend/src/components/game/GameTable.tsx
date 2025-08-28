@@ -7,7 +7,7 @@ interface GameTableProps {
   showPositionGuides?: boolean
 }
 
-const GameTable = ({ children, className, showPositionGuides = true }: GameTableProps) => {
+const GameTable = ({ children, className, showPositionGuides = false }: GameTableProps) => {
   return (
     <div className="fixed inset-0 w-full h-screen overflow-hidden">
       {/* Diamond pattern floor background */}

@@ -84,32 +84,6 @@ export default function WaitingView() {
           />
         ))}
         
-        {/* Debug dots to show calculated positions */}
-        {positions.map((pos, index) => {
-          console.log(`Debug dot ${index}: cardX=${pos.cardX}, cardY=${pos.cardY}, tableWidth=${tableDimensions.width}, tableHeight=${tableDimensions.height}`)
-          return (
-            <div key={`debug-${index}`}>
-              {/* Card position (inner ellipse) - green dot */}
-              <div 
-                className="absolute w-3 h-3 bg-green-500 rounded-full z-50"
-                style={{
-                  left: `${(pos.cardX / tableDimensions.width) * 100}%`,
-                  top: `${(pos.cardY / tableDimensions.height) * 100}%`,
-                  transform: 'translate(-50%, -50%)'
-                }}
-              />
-              {/* Badge position (outside table) - yellow dot */}
-              <div 
-                className="absolute w-3 h-3 bg-yellow-500 rounded-full z-50"
-                style={{
-                  left: `${(pos.badgeX / tableDimensions.width) * 100}%`,
-                  top: `${(pos.badgeY / tableDimensions.height) * 100}%`,
-                  transform: 'translate(-50%, -50%)'
-                }}
-              />
-            </div>
-          )
-        })}
       </div>
 
       {/* Center content - waiting message or start button */}

@@ -1,8 +1,7 @@
 import { useEffect } from 'react'
 import { useRoomStore, RoomPhase } from '../../stores/game_state'
 import { useGameWebSocket } from '../../api/game_ws'
-import WaitingView from './WaitingView'
-import PlayingView from './PlayingView'
+import RoomView from './RoomView'
 import EndGameView from './EndGameView'
 
 interface RoomProps {
@@ -50,22 +49,16 @@ export default function Room({ roomCode }: RoomProps) {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-center mb-2">
-            Room {roomCode}
-          </h1>
-          <div className="flex items-center justify-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-sm text-gray-600">Connected</span>
+    <>
+      {phase === RoomPhase.ENDED ? (
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-4xl mx-auto">
+            <EndGameView />
           </div>
         </div>
-
-        {phase === RoomPhase.WAITING && <WaitingView />}
-        {phase === RoomPhase.IN_GAME && <PlayingView />}
-        {phase === RoomPhase.ENDED && <EndGameView />}
-      </div>
-    </div>
+      ) : (
+        <RoomView />
+      )}
+    </>
   )
 }

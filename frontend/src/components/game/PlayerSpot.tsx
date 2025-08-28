@@ -19,6 +19,7 @@ interface PlayerSpotProps {
   }
   tableDimensions: { width: number; height: number }
   className?: string
+  onCardClick?: (cardIndex: number) => void
 }
 
 const PlayerSpot = ({
@@ -30,6 +31,7 @@ const PlayerSpot = ({
   position,
   tableDimensions,
   className,
+  onCardClick,
 }: PlayerSpotProps) => {
   const { width: tableWidth, height: tableHeight } = tableDimensions
   const centerX = tableWidth / 2
@@ -50,10 +52,6 @@ const PlayerSpot = ({
   const cardYPercent = (cardY / tableHeight) * 100
   const badgeXPercent = (badgeX / tableWidth) * 100
   const badgeYPercent = (badgeY / tableHeight) * 100
-
-  console.log(
-    `Player ${nickname}: cardX=${cardX}, cardY=${cardY}, cardXPercent=${cardXPercent}%, cardYPercent=${cardYPercent}%`,
-  )
 
   return (
     <>
@@ -114,13 +112,15 @@ const PlayerSpot = ({
         }}
       >
         {cards.map((card, index) => (
-          <div
+          <motion.div
             key={index}
             className="relative"
             style={{
               transform: `rotate(${index * 5 - (cards.length - 1) * 2.5}deg)`,
               marginLeft: index === 0 ? 0 : '-15px',
             }}
+            whileHover={onCardClick ? { scale: 1.1, zIndex: 10 } : {}}
+            whileTap={onCardClick ? { scale: 0.95 } : {}}
           >
             <AnimatedCard
               value={card.value}
@@ -128,8 +128,9 @@ const PlayerSpot = ({
               isFaceDown={card.isFaceDown}
               className="w-12 h-16"
               animationDelay={index * 0.1}
+              onClick={onCardClick ? () => onCardClick(index) : undefined}
             />
-          </div>
+          </motion.div>
         ))}
 
         {/* Placeholder if no cards - just show empty spot */}
