@@ -32,10 +32,10 @@ const DrawnCardSlot = ({
 
       {/* Card slot */}
       <div className="relative w-card h-card">
-        <AnimatePresence initial={false} mode="popLayout">
+        <AnimatePresence>
           {drawnCard ? (
             <AnimatedCard
-              key={drawnCard.id || 'drawn-card'}
+              key={drawnCard.id!}
               cardId={drawnCard.id}
               value={drawnCard.isFaceDown ? undefined : drawnCard.rank}
               suit={drawnCard.isFaceDown ? undefined : drawnCard.suit}

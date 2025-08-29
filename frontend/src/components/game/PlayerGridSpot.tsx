@@ -143,45 +143,32 @@ const PlayerGridSpot = ({
           rotate: angleFromCenter,
         }}
       >
-        {/* Flexbox container for cards - 2x3 grid layout using flex wrap */}
+        {/* Grid container for cards - 2x3 grid layout */}
         <div
-          className="flex flex-wrap justify-center items-center gap-2"
-          style={{
-            width: `${cardWidth * 2 + cardGap}px`,
-          }}
+          className={cn(
+            'grid grid-cols-2 gap-2 place-items-center',
+            cards.length <= 2 && 'grid-rows-1',
+            cards.length > 2 && cards.length <= 4 && 'grid-rows-2',
+            cards.length > 4 && 'grid-rows-3',
+            cards.length > 6 && 'grid-rows-4',
+            cards.length > 8 && 'grid-rows-5',
+            cards.length > 10 && 'grid-rows-6',
+            cards.length > 12 && 'grid-rows-7',
+            cards.length > 14 && 'grid-rows-8',
+            cards.length > 16 && 'grid-rows-9',
+            cards.length > 18 && 'grid-rows-10',
+            cards.length > 20 && 'grid-rows-11',
+          )}
         >
           {cards.map((card, index) => {
             return (
-              <AnimatePresence>
-                <motion.div
-                  key={playerId + '-' + index}
-                  className={cn(
-                    'relative transition-all duration-200 w-12 h-18',
-                    card.isSelected && 'ring-4 ring-yellow-400 rounded-lg z-20',
-                    card.isSelectable &&
-                      !card.isSelected &&
-                      'hover:ring-2 hover:ring-blue-400 rounded-lg cursor-pointer',
-                  )}
-                  style={{
-                    zIndex: card.isSelected ? 20 : card.isSelectable ? 10 : 1,
-                  }}
-                  initial={{ scale: 0, rotate: 180 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{
-                    delay: index * 0.05,
-                    type: 'spring',
-                    stiffness: 300,
-                    damping: 20,
-                  }}
-                  whileHover={card.isSelectable ? { scale: 1.1, y: -5 } : {}}
-                  whileTap={card.isSelectable ? { scale: 0.95 } : {}}
-                >
+              <AnimatePresence key={card.id}>
+                <div className="relative">
                   <AnimatedCard
                     cardId={card.id} // Pass card ID for layoutId animations
                     value={card.value}
                     suit={card.suit}
                     isFaceDown={card.isFaceDown}
-                    className="w-full h-full"
                     onClick={onCardClick ? () => onCardClick(index) : undefined}
                   />
                   {/* Selection indicator */}
@@ -194,7 +181,7 @@ const PlayerGridSpot = ({
                       SEL
                     </motion.div>
                   )}
-                </motion.div>
+                </div>
               </AnimatePresence>
             )
           })}

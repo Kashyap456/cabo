@@ -188,7 +188,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     setPlayers,
     addVisibleCard,
     setDeckCards,
-    setClearDrawnCard
+    replaceAndPlayCard
   } = useGamePlayStore.getState()
 
 
@@ -380,44 +380,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'card_replaced_and_played': {
-      if (gameEvent.data.played_card) {
-        const cardData = gameEvent.data.played_card
-        const cardId = gameEvent.data.played_card_id
-        if (!cardId) {
-          console.error('No card ID found for played card')
-          return
-        }
-        
-        const parsedCard = parseCardString(cardData, cardId)
-        addCardToDiscard(parsedCard)
-      }
-      
-      // Update the player's hand to show the drawn card at the replaced position
-      if (gameEvent.data.hand_index !== undefined && gameEvent.data.drawn_card_id) {
-        const player = getPlayerById(gameEvent.data.player_id)
-        const drawnCardState = useGamePlayStore.getState().drawnCard
-        
-        if (player && drawnCardState) {
-          // Create a copy of the player's cards
-          const updatedCards = [...player.cards]
-          
-          // Replace the card at the specified index with the drawn card
-          // Keep the same card ID to maintain layoutId for animation
-          updatedCards[gameEvent.data.hand_index] = {
-            ...drawnCardState,
-            id: gameEvent.data.drawn_card_id,
-            isTemporarilyViewed: false
-          }
-          
-          // Update the player's cards
-          setTimeout(() => {
-            updatePlayerCards(gameEvent.data.player_id, updatedCards)
-            setTimeout(() => {
-              setDrawnCard(null)
-            }, 500)
-          }, 500)
-        }
-      }
+      replaceAndPlayCard(gameEvent.data.player_id, gameEvent.data.hand_index, gameEvent.data.drawn_card_id)
       break
     }
 

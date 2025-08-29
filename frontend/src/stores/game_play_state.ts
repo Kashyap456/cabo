@@ -156,6 +156,7 @@ export interface GamePlayState {
   canCallStack: () => boolean
   hasStackCaller: () => boolean
   isCardSelectable: (playerId: string, cardIndex: number, sessionId?: string) => boolean
+  replaceAndPlayCard: (playerId: string, handIndex: number, drawnCardId: string) => void
 }
 
 export const useGamePlayStore = create<GamePlayState>((set, get) => ({
@@ -363,6 +364,29 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
       default:
         return false
     }
+  },
+
+  replaceAndPlayCard: (playerId: string, handIndex: number, drawnCardId: string) => {
+    const state = get()
+    const player = state.players.find(p => p.id === playerId)
+    if (!player) return
+    
+    const updatedCards = [...player.cards]
+    const oldCard = updatedCards[handIndex]
+    updatedCards[handIndex] = {
+      ...state.drawnCard,
+      id: drawnCardId,
+      isTemporarilyViewed: false
+    }
+    
+    set((state) => ({
+      discardPile: [...state.discardPile, oldCard],
+      topDiscardCard: oldCard,
+      players: state.players.map(p =>
+        p.id === playerId ? { ...p, cards: updatedCards } : p
+      ),
+      drawnCard: null
+    }))
   }
 }))
 

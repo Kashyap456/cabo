@@ -11,6 +11,7 @@ import PlayerGridSpot from '../game/PlayerGridSpot'
 import Deck from '../game/Deck'
 import WoodButton from '../ui/WoodButton'
 import ActionPanel from './ActionPanel'
+import GameStatus from '../game/GameStatus'
 import { calculatePlayerPositions } from '@/utils/tablePositions'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 
@@ -148,9 +149,14 @@ export default function RoomView() {
     }
   }
 
+  console.log(displayPlayers.map((p) => p.cards))
+
   return (
     <GameTable showPositionGuides={true} data-table-container>
       <LayoutGroup>
+        {/* Game status - show in top left during game */}
+        {isInGame && <GameStatus />}
+
         {/* Room info display - always visible */}
         <div className="fixed top-4 right-4 z-20">
           <div
@@ -323,41 +329,6 @@ export default function RoomView() {
             )}
           </AnimatePresence>
         </div>
-
-        {/* Special action status */}
-        {isInGame && gamePlayState.specialAction && (
-          <motion.div
-            initial={{ y: -50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="absolute top-20 left-1/2 -translate-x-1/2 bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 z-30"
-          >
-            <h3 className="font-semibold text-yellow-800 mb-2">
-              Special Action in Progress
-            </h3>
-            <p className="text-yellow-700">
-              {
-                gamePlayState.getPlayerById(
-                  gamePlayState.specialAction.playerId,
-                )?.nickname
-              }{' '}
-              is performing: {gamePlayState.specialAction.type}
-            </p>
-          </motion.div>
-        )}
-
-        {/* Stack caller notification */}
-        {isInGame && gamePlayState.stackCaller && (
-          <motion.div
-            initial={{ y: -50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-50 border-2 border-red-400 rounded-lg p-4 z-30"
-          >
-            <h3 className="font-semibold text-red-800 mb-2">Stack Called!</h3>
-            <p className="text-red-700">
-              {gamePlayState.stackCaller.nickname} called STACK!
-            </p>
-          </motion.div>
-        )}
 
         {/* Action Panel - bottom right corner, below player badges */}
         {isInGame && currentPlayer && (
