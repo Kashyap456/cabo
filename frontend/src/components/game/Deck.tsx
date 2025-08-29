@@ -4,10 +4,17 @@ import DrawnCardSlot from './DrawnCardSlot'
 
 interface DeckProps {
   deckCount?: number
-  discardPile?: Array<{ value: number | string; suit?: string }>
+  deckCardIds?: string[] // All card IDs currently in deck
+  discardPile?: Array<{
+    id?: string
+    value: number | string
+    suit?: string
+  }>
   drawnCard?: {
+    id?: string
     rank: string | number
     suit: string
+    isFaceDown?: boolean
   }
   onDrawFromDeck?: () => void
   onDrawFromDiscard?: () => void
@@ -17,6 +24,7 @@ interface DeckProps {
 
 const Deck = ({
   deckCount = 0,
+  deckCardIds = [],
   discardPile = [],
   drawnCard,
   onDrawFromDeck,
@@ -45,11 +53,29 @@ const Deck = ({
           className={`relative cursor-pointer ${!isCurrentPlayerTurn && 'pointer-events-none opacity-70'}`}
           onClick={onDrawFromDeck}
         >
-          {/* Top card of deck */}
-          <AnimatedCard isFaceDown={true} className="relative z-10 w-12 h-18" />
+          {/* All deck cards stacked - needed for FLIP animations */}
+          <div className="relative w-12 h-18">
+            <AnimatePresence>
+              {deckCardIds.map((cardId, _) => (
+                <AnimatedCard
+                  key={cardId}
+                  cardId={cardId}
+                  isFaceDown={true}
+                  className="absolute inset-0 w-12 h-18"
+                  animationDelay={0}
+                />
+              ))}
+            </AnimatePresence>
+            {/* Fallback if deck is empty */}
+            {deckCardIds.length === 0 && (
+              <div className="w-12 h-18 border-2 border-dashed border-white/30 rounded-lg flex items-center justify-center">
+                <span className="text-white/50 text-xs">Empty</span>
+              </div>
+            )}
+          </div>
 
           {/* Deck count */}
-          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-white text-sm font-bold">
+          <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 text-white text-sm font-bold">
             Deck
           </div>
         </div>
@@ -78,11 +104,15 @@ const Deck = ({
 
           {/* Discard pile cards */}
           <AnimatePresence>
-            <AnimatedCard
-              value={topDiscardCard.value}
-              suit={topDiscardCard.suit}
-              isFaceDown={false}
-            />
+            {topDiscardCard && (
+              <AnimatedCard
+                cardId={topDiscardCard.id}
+                value={topDiscardCard.value}
+                suit={topDiscardCard.suit}
+                isFaceDown={false}
+                className="w-12 h-18"
+              />
+            )}
           </AnimatePresence>
         </div>
       </motion.div>

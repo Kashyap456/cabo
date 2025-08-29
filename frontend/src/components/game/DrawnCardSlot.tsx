@@ -3,8 +3,10 @@ import AnimatedCard from './AnimatedCard'
 
 interface DrawnCardSlotProps {
   drawnCard?: {
+    id?: string
     rank: string | number
     suit: string
+    isFaceDown?: boolean
   }
   isCurrentPlayer: boolean
   onCardClick?: () => void
@@ -30,43 +32,18 @@ const DrawnCardSlot = ({
 
       {/* Card slot */}
       <div className="relative w-card h-card">
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           {drawnCard ? (
-            <motion.div
-              key="drawn-card"
-              initial={{
-                x: 100, // Start from deck position (to the right)
-                y: 0,
-                scale: 0.8,
-              }}
-              animate={{
-                x: 0,
-                y: 0,
-                scale: 1,
-              }}
-              exit={{
-                x: 0,
-                y: -100,
-                scale: 0,
-                opacity: 0,
-              }}
-              transition={{
-                type: 'spring',
-                stiffness: 300,
-                damping: 30,
-              }}
-              className="absolute inset-0 cursor-pointer"
+            <AnimatedCard
+              key={drawnCard.id || 'drawn-card'}
+              cardId={drawnCard.id}
+              value={drawnCard.isFaceDown ? undefined : drawnCard.rank}
+              suit={drawnCard.isFaceDown ? undefined : drawnCard.suit}
+              isFaceDown={drawnCard.isFaceDown !== false}
+              isFlipped={false} // Never use the flip that mirrors
+              className="w-12 h-18 absolute inset-0"
               onClick={isCurrentPlayer ? onCardClick : undefined}
-              whileHover={isCurrentPlayer ? { scale: 1.05 } : {}}
-              whileTap={isCurrentPlayer ? { scale: 0.95 } : {}}
-            >
-              <AnimatedCard
-                value={isCurrentPlayer ? drawnCard.rank : undefined}
-                suit={isCurrentPlayer ? drawnCard.suit : undefined}
-                isFaceDown={!isCurrentPlayer}
-                isFlipped={false} // Never use the flip that mirrors
-              />
-            </motion.div>
+            />
           ) : (
             // Empty slot placeholder
             <div className="w-12 h-18 border-2 border-dashed border-white/20 rounded-lg flex items-center justify-center text-center">

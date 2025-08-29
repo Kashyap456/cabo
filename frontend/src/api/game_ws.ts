@@ -54,6 +54,7 @@ export interface GameCheckpointMessage extends WebSocketMessage {
       has_called_cabo: boolean
     }>
     deck_size: number
+    deck_cards: string[]  // Card IDs in deck
     discard_top: {
       id: string
       rank: number
@@ -186,17 +187,36 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     getPlayerById,
     updatePlayerCards,
     setPlayers,
-    addVisibleCard
+    addVisibleCard,
+    setDeckCards
   } = useGamePlayStore.getState()
 
 
-  // Helper function to parse card strings from backend (e.g., "3♥", "K♠", "Joker")
-  const parseCardString = (cardStr: string): GameCard => {
-    if (cardStr === 'Joker') {
+  // Helper function to parse card strings from backend (e.g., "3♥", "K♠", "JB", "JR")
+  const parseCardString = (cardStr: string, id: string): GameCard => {
+    // Handle Jokers with suit differentiation
+    if (cardStr === 'JB') {
+      // Black Joker (Spades)
       return {
-        id: 'parsed_card',
+        id,
         rank: 0, // Joker
-        suit: null,
+        suit: Suit.SPADES,
+        isTemporarilyViewed: false
+      }
+    } else if (cardStr === 'JR') {
+      // Red Joker (Hearts)
+      return {
+        id,
+        rank: 0, // Joker
+        suit: Suit.HEARTS,
+        isTemporarilyViewed: false
+      }
+    } else if (cardStr === 'Joker') {
+      // Legacy support - default to black joker
+      return {
+        id,
+        rank: 0, // Joker
+        suit: Suit.SPADES,
         isTemporarilyViewed: false
       }
     } else {
@@ -212,7 +232,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         rank = faceCards[rankStr as keyof typeof faceCards] || 1
       }
       return {
-        id: 'parsed_card',
+        id,
         rank,
         suit,
         isTemporarilyViewed: false
@@ -320,69 +340,68 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'card_drawn': {
-      console.log('Card drawn by player:', gameEvent.data.player_id)
+      console.log('Card drawn by player:', gameEvent.data.player_id, 'card_id:', gameEvent.data.card_id)
       const currentUserId = useAuthStore.getState().sessionId
       
-      // Only set drawn card if it's the current user and card is visible
-      if (gameEvent.data.player_id === currentUserId && gameEvent.data.card && gameEvent.data.card !== 'hidden') {
-        const cardData = gameEvent.data.card
-        if (typeof cardData === 'string') {
-          // Parse card string from backend (e.g., "3♥", "K♠", "Joker")
-          const parsedCard = parseCardString(cardData)
-          setDrawnCard({ ...parsedCard, id: `drawn_${gameEvent.data.player_id}_${Date.now()}`, isTemporarilyViewed: true })
-        } else if (typeof cardData === 'object') {
-          // Handle object format (fallback)
-          const drawnCard = convertCard(cardData)
-          setDrawnCard({ ...drawnCard, id: `drawn_${gameEvent.data.player_id}_${Date.now()}`, isTemporarilyViewed: true })
-        }
-      } else if (gameEvent.data.player_id !== currentUserId) {
-        // Clear drawn card when another player draws
-        setDrawnCard(null)
+      // Remove card from deck (for animation)
+      if (gameEvent.data.card_id) {
+        const currentDeck = useGamePlayStore.getState().deckCards.filter(id => id !== gameEvent.data.card_id)
+        setDeckCards(currentDeck)
       }
+
+      const cardData = gameEvent.data.card
+      const cardId = gameEvent.data.card_id
+      if (!cardId) {
+        console.error('No card ID found for drawn card')
+        return
+      }
+
+      const parsedCard = parseCardString(cardData, cardId)
+      setDrawnCard({ ...parsedCard, id: cardId, isTemporarilyViewed: gameEvent.data.player_id === currentUserId })
       break
     }
 
     case 'card_played': {
-      console.log('Card played:', gameEvent.data.card, 'by player:', gameEvent.data.player_id)
+      console.log('Card played:', gameEvent.data.card, 'by player:', gameEvent.data.player_id, 'card_id:', gameEvent.data.card_id)
       const currentUserId = useAuthStore.getState().sessionId
       
       if (gameEvent.data.card && gameEvent.data.card !== 'hidden') {
         const cardData = gameEvent.data.card
-        if (typeof cardData === 'string') {
-          // Parse card string from backend (e.g., "3♥", "K♠", "Joker")
-          addCardToDiscard(parseCardString(cardData))
-        } else if (typeof cardData === 'object') {
-          // Handle object format (fallback)
-          addCardToDiscard(convertCard(cardData))
+        const cardId = gameEvent.data.card_id
+        if (!cardId) {
+          console.error('No card ID found for played card')
+          return
         }
+        
+        const parsedCard = parseCardString(cardData, cardId)
+        addCardToDiscard(parsedCard)
       }
       
       // Clear drawn card if the current player played a card
-      if (gameEvent.data.player_id === currentUserId) {
-        setDrawnCard(null)
-      }
+      setDrawnCard(null)
       break
     }
 
     case 'card_replaced_and_played': {
-      console.log('Card replaced and played by:', gameEvent.data.player_id)
-      const currentUserId = useAuthStore.getState().sessionId
+      console.log('Card replaced and played by:', gameEvent.data.player_id, 
+        'played_card_id:', gameEvent.data.played_card_id, 
+        'drawn_card_id:', gameEvent.data.drawn_card_id)
       
       if (gameEvent.data.played_card) {
         const cardData = gameEvent.data.played_card
-        if (typeof cardData === 'string') {
-          // Parse card string from backend (e.g., "3♥", "K♠", "Joker")
-          addCardToDiscard(parseCardString(cardData))
-        } else if (typeof cardData === 'object') {
-          // Handle object format (fallback)
-          addCardToDiscard(convertCard(cardData))
+        const cardId = gameEvent.data.played_card_id
+        if (!cardId) {
+          console.error('No card ID found for played card')
+          return
         }
+        
+        const parsedCard = parseCardString(cardData, cardId)
+        addCardToDiscard(parsedCard)
       }
       
+      // The drawn card goes to the player's hand (tracked in player cards update)
       // Clear drawn card if the current player used replace and play
-      if (gameEvent.data.player_id === currentUserId) {
-        setDrawnCard(null)
-      }
+      setDrawnCard(null)
       break
     }
 
@@ -432,10 +451,9 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         
         if (target && gameEvent.data.given_card) {
           // Parse and add the given card to target
-          const parsedCard = parseCardString(gameEvent.data.given_card)
+          const parsedCard = parseCardString(gameEvent.data.given_card, gameEvent.data.given_card_id)
           const newCard = {
             ...parsedCard,
-            id: `${gameEvent.data.target_id}_${target.cards.length}`,
             isTemporarilyViewed: false
           } as GameCard
           const updatedTargetCards = [...target.cards, newCard]
@@ -449,16 +467,22 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'stack_failed': {
-      console.log('Stack failed by:', gameEvent.data.player, 'penalty:', gameEvent.data.penalty_card)
+      console.log('Stack failed by:', gameEvent.data.player, 'penalty:', gameEvent.data.penalty_card, 
+        'penalty_card_id:', gameEvent.data.penalty_card_id)
+      
+      // Remove penalty card from deck (for animation)
+      if (gameEvent.data.penalty_card_id) {
+        const currentDeck = useGamePlayStore.getState().deckCards.filter(id => id !== gameEvent.data.penalty_card_id)
+        setDeckCards(currentDeck)
+      }
       
       // Player drew a penalty card
       const player = getPlayerById(gameEvent.data.player_id)
       if (player && gameEvent.data.penalty_card) {
         // Parse the penalty card from backend
-        const parsedCard = parseCardString(gameEvent.data.penalty_card)
+        const parsedCard = parseCardString(gameEvent.data.penalty_card, gameEvent.data.penalty_card_id)
         const penaltyCard = {
           ...parsedCard,
-          id: `${gameEvent.data.player_id}_${player.cards.length}`,
           isTemporarilyViewed: false
         } as GameCard
         const updatedCards = [...player.cards, penaltyCard]
@@ -471,16 +495,22 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'stack_timeout': {
-      console.log('Stack timed out for:', gameEvent.data.player, 'penalty:', gameEvent.data.penalty_card)
+      console.log('Stack timed out for:', gameEvent.data.player, 'penalty:', gameEvent.data.penalty_card,
+        'penalty_card_id:', gameEvent.data.penalty_card_id)
+      
+      // Remove penalty card from deck (for animation)
+      if (gameEvent.data.penalty_card_id) {
+        const currentDeck = useGamePlayStore.getState().deckCards.filter(id => id !== gameEvent.data.penalty_card_id)
+        setDeckCards(currentDeck)
+      }
       
       // Player who timed out gets a penalty card
       const player = getPlayerById(gameEvent.data.player_id)
       if (player && gameEvent.data.penalty_card) {
         // Parse the penalty card from backend
-        const parsedCard = parseCardString(gameEvent.data.penalty_card)
+        const parsedCard = parseCardString(gameEvent.data.penalty_card, gameEvent.data.penalty_card_id)
         const penaltyCard = {
           ...parsedCard,
-          id: `${gameEvent.data.player_id}_${player.cards.length}`,
           isTemporarilyViewed: false
         } as GameCard
         const updatedCards = [...player.cards, penaltyCard]
@@ -512,10 +542,9 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
           const updatedCards = [...player.cards]
           if (updatedCards[gameEvent.data.card_index]) {
             // Parse the card string (e.g., "3♥", "K♠", "Joker")
-            const parsedCard = parseCardString(gameEvent.data.card)
+            const parsedCard = parseCardString(gameEvent.data.card, gameEvent.data.card_id)
             updatedCards[gameEvent.data.card_index] = { 
               ...parsedCard,
-              id: `${gameEvent.data.player_id}_${gameEvent.data.card_index}`,
               isTemporarilyViewed: true 
             }
             updatePlayerCards(gameEvent.data.player_id, updatedCards)
@@ -544,10 +573,9 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
           const updatedCards = [...targetPlayer.cards]
           if (updatedCards[gameEvent.data.card_index]) {
             // Parse the card string (e.g., "3♥", "K♠", "Joker")
-            const parsedCard = parseCardString(gameEvent.data.card)
+            const parsedCard = parseCardString(gameEvent.data.card, gameEvent.data.card_id)
             updatedCards[gameEvent.data.card_index] = { 
               ...parsedCard,
-              id: `${gameEvent.data.target_id}_${gameEvent.data.card_index}`,
               isTemporarilyViewed: true 
             }
             updatePlayerCards(gameEvent.data.target_id, updatedCards)
@@ -585,14 +613,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       if (gameEvent.data.updated_visibility) {
         syncCardVisibility(gameEvent.data.updated_visibility)
       }
-      
-      // Update player cards if the data includes the new card states (legacy support)
-      if (gameEvent.data.updated_players) {
-        gameEvent.data.updated_players.forEach((playerData: any) => {
-          const cards = playerData.cards.map(convertCard)
-          updatePlayerCards(playerData.id, cards)
-        })
-      }
       break
     }
 
@@ -610,10 +630,9 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
           const updatedCards = [...targetPlayer.cards]
           if (updatedCards[gameEvent.data.card_index]) {
             // Parse the card string (e.g., "3♥", "K♠", "Joker")
-            const parsedCard = parseCardString(gameEvent.data.card)
+            const parsedCard = parseCardString(gameEvent.data.card, gameEvent.data.card_id)
             updatedCards[gameEvent.data.card_index] = { 
               ...parsedCard, 
-              id: `${gameEvent.data.target_id}_${gameEvent.data.card_index}`,
               isTemporarilyViewed: true 
             }
             updatePlayerCards(gameEvent.data.target_id, updatedCards)
@@ -644,8 +663,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         // Otherwise, swap the unknown cards
         if (gameEvent.data.player_id === currentUserId || gameEvent.data.target_id === currentUserId) {
           // Parse the actual card data sent from backend
-          const playerCardData = gameEvent.data.target_card ? parseCardString(gameEvent.data.target_card) : targetCards[gameEvent.data.target_index]
-          const targetCardData = gameEvent.data.player_card ? parseCardString(gameEvent.data.player_card) : playerCards[gameEvent.data.player_index]
+          const playerCardData = gameEvent.data.target_card ? parseCardString(gameEvent.data.target_card, gameEvent.data.target_card_id) : targetCards[gameEvent.data.target_index]
+          const targetCardData = gameEvent.data.player_card ? parseCardString(gameEvent.data.player_card, gameEvent.data.player_card_id) : playerCards[gameEvent.data.player_index]
           
           // Swap with actual card data, preserving IDs
           playerCards[gameEvent.data.player_index] = {
@@ -678,8 +697,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         
         // For King swaps, we know exactly which cards were swapped
         // Only make the swapped cards visible, not other cards of the same rank
-        const swappedPlayerCard = gameEvent.data.player_card ? parseCardString(gameEvent.data.player_card) : null
-        const swappedTargetCard = gameEvent.data.target_card ? parseCardString(gameEvent.data.target_card) : null
+        const swappedPlayerCard = gameEvent.data.player_card ? parseCardString(gameEvent.data.player_card, gameEvent.data.player_card_id) : null
+        const swappedTargetCard = gameEvent.data.target_card ? parseCardString(gameEvent.data.target_card, gameEvent.data.target_card_id) : null
         
         // Update all player cards based on the new visibility
         const players = useGamePlayStore.getState().players
@@ -821,16 +840,31 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         setCurrentPlayer(gameState.current_player || '')
         setPhase(gameState.phase as GamePhase)
         
+        // Set deck cards (for animation tracking)
+        if (gameState.deck_cards) {
+          setDeckCards(gameState.deck_cards)
+        }
+        
         // Set drawn card if exists and belongs to current player
-        if (gameState.drawn_card && gameState.current_player === currentUserId) {
-          setDrawnCard(parseCardString(gameState.drawn_card))
-        } else {
-          setDrawnCard(null)
+        if (gameState.drawn_card  ) {
+          // drawn_card from checkpoint already has id, rank, suit fields
+          setDrawnCard({
+            id: gameState.drawn_card.id,
+            rank: gameState.drawn_card.rank,
+            suit: gameState.drawn_card.suit,
+            isTemporarilyViewed: gameState.current_player === currentUserId
+          })
         }
         
         // Set discard pile
         if (gameState.discard_top) {
-          addCardToDiscard(parseCardString(gameState.discard_top))
+          // discard_top from checkpoint already has id, rank, suit fields
+          addCardToDiscard({
+            id: gameState.discard_top.id,
+            rank: gameState.discard_top.rank,
+            suit: gameState.discard_top.suit,
+            isTemporarilyViewed: false
+          })
         }
         
         // Set special action with proper type conversion

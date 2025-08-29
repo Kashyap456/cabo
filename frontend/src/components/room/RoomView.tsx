@@ -9,12 +9,10 @@ import { useCardVisibility } from '@/hooks/useCardVisibility'
 import GameTable from '../game/GameTable'
 import PlayerGridSpot from '../game/PlayerGridSpot'
 import Deck from '../game/Deck'
-import CardSwapAnimation from '../game/CardSwapAnimation'
-import CardReplacementAnimation from '../game/CardReplacementAnimation'
 import WoodButton from '../ui/WoodButton'
 import ActionPanel from './ActionPanel'
 import { calculatePlayerPositions } from '@/utils/tablePositions'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 
 export default function RoomView() {
   // Room state
@@ -27,13 +25,6 @@ export default function RoomView() {
   const gamePlayState = useGamePlayStore()
   const { sendMessage } = useGameWebSocket()
   const { isCardVisible } = useCardVisibility()
-
-  // Track replacement animation state
-  const [replacementAnimation, setReplacementAnimation] = useState<{
-    drawnCard: any
-    replacedIndex: number
-    playerId: string
-  } | null>(null)
 
   // Table dimensions
   const [tableDimensions, setTableDimensions] = useState({
@@ -118,26 +109,17 @@ export default function RoomView() {
       : null
     if (!player) return
 
-    // Handle replacement when card is drawn
+    // Handle card replacement during CARD_DRAWN phase
     if (
-      gamePlayState.drawnCard &&
+      playerId === sessionId &&
       isMyTurn &&
-      gamePhase === GamePhase.CARD_DRAWN
+      gamePhase === GamePhase.CARD_DRAWN &&
+      gamePlayState.drawnCard
     ) {
-      // Trigger the replacement animation
-      setReplacementAnimation({
-        drawnCard: gamePlayState.drawnCard,
-        replacedIndex: cardIndex,
-        playerId: playerId,
+      sendMessage({
+        type: 'replace_and_play',
+        hand_index: cardIndex,
       })
-
-      // Send the message after a short delay to sync with animation
-      setTimeout(() => {
-        sendMessage({
-          type: 'replace_and_play',
-          hand_index: cardIndex,
-        })
-      }, 200)
       return
     }
 
@@ -168,213 +150,227 @@ export default function RoomView() {
 
   return (
     <GameTable showPositionGuides={true} data-table-container>
-      {/* Room info display - always visible */}
-      <div className="fixed top-4 right-4 z-20">
-        <div
-          className="border-4 border-yellow-500/80 px-4 py-3 rounded-lg shadow-wood-deep"
-          style={{
-            background:
-              'linear-gradient(180deg, #D2B48C 0%, #C19A6B 50%, #D2B48C 100%)',
-          }}
-        >
-          <div className="flex flex-col gap-2">
-            <div>
-              <p className="text-wood-darker font-bold text-xs uppercase">
-                Room Code
-              </p>
-              <p className="text-yellow-100 font-black text-xl tracking-wider text-shadow-painted">
-                {roomCode}
-              </p>
-            </div>
-            <div className="border-t-2 border-wood-medium pt-2">
-              <p className="text-yellow-100 font-bold text-sm">
-                {players.length} / 8 Players
-              </p>
-              {isInGame && gamePhase && (
-                <p className="text-yellow-200 text-xs mt-1">
-                  Phase: {gamePhase}
+      <LayoutGroup>
+        {/* Room info display - always visible */}
+        <div className="fixed top-4 right-4 z-20">
+          <div
+            className="border-4 border-yellow-500/80 px-4 py-3 rounded-lg shadow-wood-deep"
+            style={{
+              background:
+                'linear-gradient(180deg, #D2B48C 0%, #C19A6B 50%, #D2B48C 100%)',
+            }}
+          >
+            <div className="flex flex-col gap-2">
+              <div>
+                <p className="text-wood-darker font-bold text-xs uppercase">
+                  Room Code
                 </p>
-              )}
+                <p className="text-yellow-100 font-black text-xl tracking-wider text-shadow-painted">
+                  {roomCode}
+                </p>
+              </div>
+              <div className="border-t-2 border-wood-medium pt-2">
+                <p className="text-yellow-100 font-bold text-sm">
+                  {players.length} / 8 Players
+                </p>
+                {isInGame && gamePhase && (
+                  <p className="text-yellow-200 text-xs mt-1">
+                    Phase: {gamePhase}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Players positioned around the table */}
-      <div className="absolute inset-0">
-        <AnimatePresence mode="wait">
-          {displayPlayers.map((player, index) => {
-            const roomPlayer = players.find((p) => p.id === player.id)
-            const cards = isInGame && 'cards' in player ? player.cards : []
+        {/* Players positioned around the table */}
+        <div className="absolute inset-0">
+          <AnimatePresence mode="wait">
+            {displayPlayers.map((player, index) => {
+              const roomPlayer = players.find((p) => p.id === player.id)
+              const cards = isInGame && 'cards' in player ? player.cards : []
 
-            return (
-              <PlayerGridSpot
-                key={player.id}
-                nickname={player.nickname || roomPlayer?.nickname || 'Unknown'}
-                isHost={roomPlayer?.isHost || false}
-                isCurrentPlayer={player.id === sessionId}
-                isTurn={isInGame && player.id === gamePlayState.currentPlayerId}
-                position={positions[index]}
-                tableDimensions={tableDimensions}
-                cards={cards.map((card: any, cardIndex: number) => ({
-                  value: isCardVisible(player.id, cardIndex, card)
-                    ? card.rank
-                    : undefined,
-                  suit: isCardVisible(player.id, cardIndex, card)
-                    ? card.suit
-                    : undefined,
-                  isFaceDown: !isCardVisible(player.id, cardIndex, card),
-                  isSelected:
-                    isInGame &&
-                    gamePlayState.selectedCards.some(
-                      (s) =>
-                        s.playerId === player.id && s.cardIndex === cardIndex,
-                    ),
-                  isSelectable:
-                    isInGame &&
-                    // Selectable for special actions
-                    (gamePlayState.isCardSelectable(
-                      player.id,
-                      cardIndex,
-                      sessionId,
-                    ) ||
-                      // Selectable for card replacement when it's our turn and we have a drawn card
-                      (player.id === sessionId &&
-                        gamePlayState.drawnCard &&
-                        isMyTurn &&
-                        gamePhase === GamePhase.CARD_DRAWN)),
-                }))}
-                onCardClick={
-                  isInGame
-                    ? (cardIndex) => handleHandCardClick(player.id, cardIndex)
-                    : undefined
-                }
-              />
-            )
-          })}
-        </AnimatePresence>
-      </div>
-
-      {/* Center content - changes based on phase */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-        <AnimatePresence mode="wait">
-          {/* Waiting phase content */}
-          {roomPhase === RoomPhase.WAITING && (
-            <motion.div
-              key="waiting"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="text-center"
-            >
-              {players.length < 2 ? (
-                <div>
-                  <p className="text-white/80 text-lg font-semibold mb-2">
-                    Waiting for players...
-                  </p>
-                  <p className="text-white/60 text-sm">
-                    Need at least {2 - players.length} more player
-                    {2 - players.length > 1 ? 's' : ''}
-                  </p>
-                </div>
-              ) : isHost ? (
-                <WoodButton
-                  variant="large"
-                  onClick={() => startGameMutation.mutate(roomCode)}
-                  disabled={startGameMutation.isPending}
-                  className="min-w-[200px]"
-                >
-                  {startGameMutation.isPending ? 'Starting...' : 'Start Game'}
-                </WoodButton>
-              ) : (
-                <div>
-                  <p className="text-white/80 text-lg font-semibold">
-                    Waiting for host to start
-                  </p>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* In-game content */}
-          {roomPhase === RoomPhase.IN_GAME && (
-            <motion.div
-              key="playing"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="flex items-center justify-center"
-            >
-              {/* Deck with integrated drawn card slot and discard pile */}
-              <Deck
-                deckCount={50} // TODO: Get from game state
-                discardPile={
-                  gamePlayState.topDiscardCard
-                    ? [
-                        {
-                          value: gamePlayState.topDiscardCard.rank,
-                          suit: gamePlayState.topDiscardCard.suit,
-                        },
-                      ]
-                    : []
-                }
-                drawnCard={
-                  // Show the actual card if current player drew it
-                  gamePlayState.drawnCard ||
-                  // Show a placeholder card for others when someone has drawn
-                  (gamePhase === GamePhase.CARD_DRAWN && !isMyTurn
-                    ? { rank: '?', suit: '?' }
-                    : null)
-                }
-                onDrawFromDeck={handleDeckClick}
-                onDrawnCardClick={handleDrawnCardClick}
-                isCurrentPlayerTurn={isMyTurn}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Special action status */}
-      {isInGame && gamePlayState.specialAction && (
-        <motion.div
-          initial={{ y: -50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="absolute top-20 left-1/2 -translate-x-1/2 bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 z-30"
-        >
-          <h3 className="font-semibold text-yellow-800 mb-2">
-            Special Action in Progress
-          </h3>
-          <p className="text-yellow-700">
-            {
-              gamePlayState.getPlayerById(gamePlayState.specialAction.playerId)
-                ?.nickname
-            }{' '}
-            is performing: {gamePlayState.specialAction.type}
-          </p>
-        </motion.div>
-      )}
-
-      {/* Stack caller notification */}
-      {isInGame && gamePlayState.stackCaller && (
-        <motion.div
-          initial={{ y: -50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-50 border-2 border-red-400 rounded-lg p-4 z-30"
-        >
-          <h3 className="font-semibold text-red-800 mb-2">Stack Called!</h3>
-          <p className="text-red-700">
-            {gamePlayState.stackCaller.nickname} called STACK!
-          </p>
-        </motion.div>
-      )}
-
-      {/* Action Panel - bottom right corner, below player badges */}
-      {isInGame && currentPlayer && (
-        <div className="fixed bottom-4 right-4 z-10">
-          <ActionPanel />
+              return (
+                <PlayerGridSpot
+                  key={player.id}
+                  nickname={
+                    player.nickname || roomPlayer?.nickname || 'Unknown'
+                  }
+                  isHost={roomPlayer?.isHost || false}
+                  isCurrentPlayer={player.id === sessionId}
+                  isTurn={
+                    isInGame && player.id === gamePlayState.currentPlayerId
+                  }
+                  position={positions[index]}
+                  tableDimensions={tableDimensions}
+                  cards={cards.map((card: any, cardIndex: number) => ({
+                    id: card.id, // Pass through the card ID for animations
+                    value: isCardVisible(player.id, cardIndex, card)
+                      ? card.rank
+                      : undefined,
+                    suit: isCardVisible(player.id, cardIndex, card)
+                      ? card.suit
+                      : undefined,
+                    isFaceDown: !isCardVisible(player.id, cardIndex, card),
+                    isSelected:
+                      isInGame &&
+                      gamePlayState.selectedCards.some(
+                        (s) =>
+                          s.playerId === player.id && s.cardIndex === cardIndex,
+                      ),
+                    isSelectable:
+                      isInGame &&
+                      // Selectable for special actions
+                      (gamePlayState.isCardSelectable(
+                        player.id,
+                        cardIndex,
+                        sessionId,
+                      ) ||
+                        // Selectable for card replacement when it's our turn and we have a drawn card
+                        (player.id === sessionId &&
+                          gamePlayState.drawnCard &&
+                          isMyTurn &&
+                          gamePhase === GamePhase.CARD_DRAWN)),
+                  }))}
+                  onCardClick={
+                    isInGame
+                      ? (cardIndex) => handleHandCardClick(player.id, cardIndex)
+                      : undefined
+                  }
+                />
+              )
+            })}
+          </AnimatePresence>
         </div>
-      )}
+
+        {/* Center content - changes based on phase */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+          <AnimatePresence mode="wait">
+            {/* Waiting phase content */}
+            {roomPhase === RoomPhase.WAITING && (
+              <motion.div
+                key="waiting"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="text-center"
+              >
+                {players.length < 2 ? (
+                  <div>
+                    <p className="text-white/80 text-lg font-semibold mb-2">
+                      Waiting for players...
+                    </p>
+                    <p className="text-white/60 text-sm">
+                      Need at least {2 - players.length} more player
+                      {2 - players.length > 1 ? 's' : ''}
+                    </p>
+                  </div>
+                ) : isHost ? (
+                  <WoodButton
+                    variant="large"
+                    onClick={() => startGameMutation.mutate(roomCode)}
+                    disabled={startGameMutation.isPending}
+                    className="min-w-[200px]"
+                  >
+                    {startGameMutation.isPending ? 'Starting...' : 'Start Game'}
+                  </WoodButton>
+                ) : (
+                  <div>
+                    <p className="text-white/80 text-lg font-semibold">
+                      Waiting for host to start
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* In-game content */}
+            {roomPhase === RoomPhase.IN_GAME && (
+              <motion.div
+                key="playing"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="flex items-center justify-center"
+              >
+                {/* Deck with integrated drawn card slot and discard pile */}
+                <Deck
+                  deckCount={gamePlayState.deckCards.length}
+                  deckCardIds={gamePlayState.deckCards} // Pass all card IDs in deck
+                  discardPile={
+                    gamePlayState.topDiscardCard
+                      ? [
+                          {
+                            id: gamePlayState.topDiscardCard.id,
+                            value: gamePlayState.topDiscardCard.rank,
+                            suit: gamePlayState.topDiscardCard.suit,
+                          },
+                        ]
+                      : []
+                  }
+                  drawnCard={
+                    gamePlayState.drawnCard
+                      ? {
+                          id: gamePlayState.drawnCard.id,
+                          rank: gamePlayState.drawnCard.rank,
+                          suit: gamePlayState.drawnCard.suit,
+                          // Show face based on visibility
+                          isFaceDown:
+                            !gamePlayState.drawnCard.isTemporarilyViewed,
+                        }
+                      : null
+                  }
+                  onDrawFromDeck={handleDeckClick}
+                  onDrawnCardClick={handleDrawnCardClick}
+                  isCurrentPlayerTurn={isMyTurn}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Special action status */}
+        {isInGame && gamePlayState.specialAction && (
+          <motion.div
+            initial={{ y: -50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="absolute top-20 left-1/2 -translate-x-1/2 bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 z-30"
+          >
+            <h3 className="font-semibold text-yellow-800 mb-2">
+              Special Action in Progress
+            </h3>
+            <p className="text-yellow-700">
+              {
+                gamePlayState.getPlayerById(
+                  gamePlayState.specialAction.playerId,
+                )?.nickname
+              }{' '}
+              is performing: {gamePlayState.specialAction.type}
+            </p>
+          </motion.div>
+        )}
+
+        {/* Stack caller notification */}
+        {isInGame && gamePlayState.stackCaller && (
+          <motion.div
+            initial={{ y: -50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-50 border-2 border-red-400 rounded-lg p-4 z-30"
+          >
+            <h3 className="font-semibold text-red-800 mb-2">Stack Called!</h3>
+            <p className="text-red-700">
+              {gamePlayState.stackCaller.nickname} called STACK!
+            </p>
+          </motion.div>
+        )}
+
+        {/* Action Panel - bottom right corner, below player badges */}
+        {isInGame && currentPlayer && (
+          <div className="fixed bottom-4 right-4 z-10">
+            <ActionPanel />
+          </div>
+        )}
+      </LayoutGroup>
     </GameTable>
   )
 }

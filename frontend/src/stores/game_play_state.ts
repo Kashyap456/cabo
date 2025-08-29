@@ -99,6 +99,9 @@ export interface GamePlayState {
   // Card visibility map: viewer_id -> [(target_player_id, card_index)]
   cardVisibility: { [viewerId: string]: Array<[string, number]> }
   
+  // Deck (card IDs still in deck)
+  deckCards: string[]
+  
   // Discard pile
   discardPile: Card[]
   topDiscardCard: Card | null
@@ -141,6 +144,7 @@ export interface GamePlayState {
   setDiscardPile: (cards: Card[]) => void
   setEndGameData: (data: EndGameData) => void
   updateCountdown: (seconds: number) => void
+  setDeckCards: (cardIds: string[]) => void
   
   // Helper functions
   getCurrentPlayer: () => PlayerGameState | null
@@ -157,6 +161,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   turnNumber: 1,
   players: [],
   cardVisibility: {},
+  deckCards: [],
   discardPile: [],
   topDiscardCard: null,
   drawnCard: null,
@@ -254,6 +259,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     turnNumber: 1,
     players: [],
     cardVisibility: {},
+    deckCards: [],
     discardPile: [],
     topDiscardCard: null,
     drawnCard: null,
@@ -271,6 +277,8 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   }),
   
   setEndGameData: (data) => set({ endGameData: data }),
+  
+  setDeckCards: (cardIds) => set({ deckCards: cardIds }),
   
   updateCountdown: (seconds) => set((state) => ({
     endGameData: state.endGameData ? { ...state.endGameData, countdownSeconds: seconds } : null

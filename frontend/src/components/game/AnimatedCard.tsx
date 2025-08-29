@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 
 interface AnimatedCardProps {
+  cardId?: string // Unique card identity for layoutId
   value?: number | string
   suit?: string
   isFlipped?: boolean
@@ -10,11 +11,11 @@ interface AnimatedCardProps {
   onClick?: () => void
   className?: string
   animationDelay?: number
-  position?: { x: number; y: number }
-  rotation?: number
+  isSelected?: boolean
 }
 
 const AnimatedCard = ({
+  cardId,
   value,
   suit,
   isFlipped = false,
@@ -22,8 +23,7 @@ const AnimatedCard = ({
   onClick,
   className,
   animationDelay = 0,
-  position = { x: 0, y: 0 },
-  rotation = 0,
+  isSelected = false,
 }: AnimatedCardProps) => {
   const [isAnimatingFlip, setIsAnimatingFlip] = useState(false)
   const [showFace, setShowFace] = useState(!isFaceDown)
@@ -127,31 +127,45 @@ const AnimatedCard = ({
 
   return (
     <motion.div
+      layoutId={cardId} // Enable automatic FLIP animations
+      layout
       className={cn(
         'cursor-pointer preserve-3d',
         'w-12 h-18', // Default width if not specified
         !className?.includes('h-') && 'h-card', // Default height if not specified
         isAnimatingFlip && 'pointer-events-none',
+        isSelected && 'ring-4 ring-yellow-400',
         className,
       )}
       initial={{
-        x: position.x,
-        y: position.y,
-        rotate: rotation,
         scale: 0,
+        opacity: 0,
       }}
       animate={{
-        x: position.x,
-        y: position.y,
-        rotate: rotation,
         rotateY: isFlipped ? 180 : 0,
-        scale: 1,
+        scale: isSelected ? 1.05 : 1,
+        opacity: 1,
+      }}
+      exit={{
+        scale: 0,
+        opacity: 0,
       }}
       transition={{
-        type: 'spring',
-        stiffness: 300,
-        damping: 30,
-        delay: animationDelay,
+        layout: {
+          type: 'spring',
+          stiffness: 300,
+          damping: 30,
+        },
+        scale: {
+          type: 'spring',
+          stiffness: 300,
+          damping: 30,
+          delay: animationDelay,
+        },
+        opacity: {
+          duration: 0.2,
+          delay: animationDelay,
+        },
       }}
       onClick={onClick}
       whileHover={{ scale: 1.05 }}

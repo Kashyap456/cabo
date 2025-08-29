@@ -8,6 +8,7 @@ interface PlayerGridSpotProps {
   isCurrentPlayer?: boolean
   isTurn?: boolean
   cards?: Array<{
+    id?: string // Card ID for animations
     value?: number | string
     suit?: string
     isFaceDown: boolean
@@ -155,7 +156,7 @@ const PlayerGridSpot = ({
           {cards.map((card, index) => {
             return (
               <motion.div
-                key={index}
+                key={card.id}
                 className={cn(
                   'relative transition-all duration-200 w-12 h-18',
                   card.isSelected && 'ring-4 ring-yellow-400 rounded-lg z-20',
@@ -178,6 +179,7 @@ const PlayerGridSpot = ({
                 whileTap={card.isSelectable ? { scale: 0.95 } : {}}
               >
                 <AnimatedCard
+                  cardId={card.id} // Pass card ID for layoutId animations
                   value={card.value}
                   suit={card.suit}
                   isFaceDown={card.isFaceDown}

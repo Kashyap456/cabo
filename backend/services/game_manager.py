@@ -36,7 +36,15 @@ class Rank(Enum):
 @dataclass
 class Card:
     rank: Rank
-    suit: Optional[Suit] = None  # Jokers don't have suits
+    suit: Optional[Suit] = None  # Jokers have suits for identification only
+
+    @property
+    def identity(self) -> str:
+        """Stable unique identifier for animations"""
+        if self.rank == Rank.JOKER:
+            # Jokers use suit for differentiation (hearts/spades)
+            return f"joker_{self.suit.value if self.suit else 'unknown'}"
+        return f"{self.rank.value}_{self.suit.value}"
 
     @property
     def value(self) -> int:
@@ -55,8 +63,15 @@ class Card:
 
     def __str__(self) -> str:
         if self.rank == Rank.JOKER:
-            return "Joker"
-        
+            # JB for Black Joker (Spades), JR for Red Joker (Hearts)
+            if self.suit == Suit.SPADES:
+                return "JB"
+            elif self.suit == Suit.HEARTS:
+                return "JR"
+            else:
+                # Fallback for legacy jokers without suits
+                return "Joker"
+
         # Map rank to short format
         rank_map = {
             Rank.ACE: 'A',
@@ -73,7 +88,7 @@ class Card:
             Rank.QUEEN: 'Q',
             Rank.KING: 'K'
         }
-        
+
         # Map suit to symbol
         suit_map = {
             Suit.HEARTS: '♥',
@@ -81,10 +96,10 @@ class Card:
             Suit.CLUBS: '♣',
             Suit.SPADES: '♠'
         }
-        
+
         rank_str = rank_map.get(self.rank, str(self.rank.value))
         suit_str = suit_map.get(self.suit, '?')
-        
+
         return f"{rank_str}{suit_str}"
 
 
@@ -102,7 +117,11 @@ class Deck:
                     self.cards.append(Card(rank, suit))
 
         if include_jokers:
-            self.cards.extend([Card(Rank.JOKER), Card(Rank.JOKER)])
+            # Assign hearts to one joker, spades to the other for unique identities
+            self.cards.extend([
+                Card(Rank.JOKER, Suit.HEARTS),
+                Card(Rank.JOKER, Suit.SPADES)
+            ])
 
     def shuffle(self):
         random.shuffle(self.cards)
@@ -364,7 +383,7 @@ class CaboGame:
         # Schedule setup timeout (game stays in SETUP phase)
         self.state.setup_timer_id = self._schedule_timeout(
             SetupTimeoutMessage(), 10.0)  # 10 seconds for setup
-        
+
         # Note: game_started event should be published by the orchestrator after creation
 
     def _deal_initial_cards(self):
@@ -485,16 +504,19 @@ class CaboGame:
     def _handle_draw_card(self, message: DrawCardMessage) -> Dict[str, Any]:
         """Handle draw card action"""
         if self.state.phase != GamePhase.DRAW_PHASE:
-            print(f"DEBUG: Cannot draw - phase is {self.state.phase}, not PLAYING")
+            print(
+                f"DEBUG: Cannot draw - phase is {self.state.phase}, not PLAYING")
             return {"success": False, "error": "Game not in playing phase"}
 
         current_player = self.get_current_player()
         if current_player.player_id != message.player_id:
-            print(f"DEBUG: Cannot draw - current player is {current_player.player_id}, not {message.player_id}")
+            print(
+                f"DEBUG: Cannot draw - current player is {current_player.player_id}, not {message.player_id}")
             return {"success": False, "error": "Not your turn"}
 
         if self.state.drawn_card is not None:
-            print(f"DEBUG: Cannot draw - drawn_card is {self.state.drawn_card}, should be None")
+            print(
+                f"DEBUG: Cannot draw - drawn_card is {self.state.drawn_card}, should be None")
             return {"success": False, "error": "Card already drawn this turn"}
 
         card = self.deck.draw()
@@ -503,17 +525,19 @@ class CaboGame:
 
         self.state.drawn_card = card
         self.state.phase = GamePhase.CARD_DRAWN  # Transition to card drawn phase
-        
+
         events = []
         events.append(GameEvent("card_drawn", {
             "player_id": message.player_id,
-            "card": str(card)  # Always pass the actual card, orchestrator handles visibility
+            # Always pass the actual card, orchestrator handles visibility
+            "card": str(card),
+            "card_id": card.identity  # Include card identity for animations
         }))
         events.append(GameEvent("game_phase_changed", {
             "phase": "card_drawn",
             "current_player": current_player.player_id
         }))
-        
+
         return {
             "success": True,
             "events": events
@@ -523,7 +547,7 @@ class CaboGame:
         """Handle playing the drawn card directly"""
         if self.state.phase != GamePhase.CARD_DRAWN:
             return {"success": False, "error": "Must draw a card first"}
-        
+
         if self.state.drawn_card is None:
             return {"success": False, "error": "No card drawn"}
 
@@ -539,14 +563,15 @@ class CaboGame:
         # Handle special effects
         events = []
         next_messages = []
-        
+
         # Always send the card_played event first
         events.append(GameEvent("card_played", {
             "player_id": message.player_id,
             "card": str(card),
+            "card_id": card.identity,  # Include card identity for animations
             "special_effect": card.is_special
         }))
-        
+
         if card.is_special:
             self.state.special_action_player = message.player_id
             self.state.special_action_timer_id = self._schedule_timeout(
@@ -573,7 +598,7 @@ class CaboGame:
             self.state.phase = GamePhase.TURN_TRANSITION
             self.state.turn_transition_timer_id = self._schedule_timeout(
                 TurnTransitionTimeoutMessage(), 5.0)
-            
+
             events.append(GameEvent("game_phase_changed", {
                 "phase": "turn_transition",
                 "current_player": self.get_current_player().player_id
@@ -589,7 +614,7 @@ class CaboGame:
         """Handle replacing hand card with drawn card and playing the old one"""
         if self.state.phase != GamePhase.CARD_DRAWN:
             return {"success": False, "error": "Must draw a card first"}
-        
+
         if self.state.drawn_card is None:
             return {"success": False, "error": "No card drawn"}
 
@@ -610,15 +635,18 @@ class CaboGame:
         # Handle special effects
         events = []
         next_messages = []
-        
+
         # Always send the card_replaced_and_played event first
         events.append(GameEvent("card_replaced_and_played", {
             "player_id": message.player_id,
             "played_card": str(old_card),
+            "played_card_id": old_card.identity,  # Card going to discard
+            # Card going to hand
+            "drawn_card_id": current_player.hand[message.hand_index].identity,
             "hand_index": message.hand_index,
             "special_effect": old_card.is_special
         }))
-        
+
         if old_card.is_special:
             self.state.special_action_player = message.player_id
             self.state.special_action_timer_id = self._schedule_timeout(
@@ -645,7 +673,7 @@ class CaboGame:
             self.state.phase = GamePhase.TURN_TRANSITION
             self.state.turn_transition_timer_id = self._schedule_timeout(
                 TurnTransitionTimeoutMessage(), 5.0)
-            
+
             events.append(GameEvent("game_phase_changed", {
                 "phase": "turn_transition",
                 "current_player": self.get_current_player().player_id
@@ -689,10 +717,11 @@ class CaboGame:
         self.state.stack_caller = message.player_id
         self.state.stack_timer_id = self._schedule_timeout(
             StackTimeoutMessage(), 30.0)
-        
+
         # Cancel turn transition timer if it exists
         if self.state.turn_transition_timer_id:
-            self.pending_timeouts.pop(self.state.turn_transition_timer_id, None)
+            self.pending_timeouts.pop(
+                self.state.turn_transition_timer_id, None)
             self.state.turn_transition_timer_id = None
 
         return {
@@ -764,7 +793,8 @@ class CaboGame:
                         "card_index": message.card_index,
                         "target": target_player.name,
                         "target_id": target_player.player_id,
-                        "given_card": str(stack_card)
+                        "given_card": str(stack_card),
+                        "given_card_id": stack_card.identity
                     }),
                     "next_messages": next_messages
                 }
@@ -780,7 +810,8 @@ class CaboGame:
                     "player": player.name,
                     "player_id": player.player_id,
                     "attempted_card": str(stack_card),
-                    "penalty_card": str(drawn_card) if drawn_card else None
+                    "penalty_card": str(drawn_card) if drawn_card else None,
+                    "penalty_card_id": drawn_card.identity if drawn_card else None
                 }),
                 "next_messages": next_messages
             }
@@ -791,6 +822,7 @@ class CaboGame:
             return {"success": False, "error": "Not in stack phase"}
 
         stack_caller = self.get_player_by_id(self.state.stack_caller)
+        drawn_card = None
         if stack_caller:
             # Apply penalty
             drawn_card = self.deck.draw()
@@ -804,7 +836,8 @@ class CaboGame:
             "event": GameEvent("stack_timeout", {
                 "player": stack_caller.name if stack_caller else "Unknown",
                 "player_id": self.state.stack_caller,
-                "penalty_card": str(drawn_card) if 'drawn_card' in locals() and drawn_card else None
+                "penalty_card": str(drawn_card) if drawn_card else None,
+                "penalty_card_id": drawn_card.identity if drawn_card else None
             }),
             "next_messages": [NextTurnMessage()]
         }
@@ -842,8 +875,9 @@ class CaboGame:
 
     def _handle_next_turn(self, _: NextTurnMessage) -> Dict[str, Any]:
         """Handle moving to next turn"""
-        print(f"DEBUG: _handle_next_turn - drawn_card before: {self.state.drawn_card}")
-        
+        print(
+            f"DEBUG: _handle_next_turn - drawn_card before: {self.state.drawn_card}")
+
         # Check if game should end (if cabo was called and we're returning to caller)
         if self.is_cabo_called():
             next_index = (self.state.current_player_index +
@@ -864,7 +898,8 @@ class CaboGame:
 
         self.state.drawn_card = None
         self.state.played_card = None
-        print(f"DEBUG: _handle_next_turn - drawn_card after clear: {self.state.drawn_card}")
+        print(
+            f"DEBUG: _handle_next_turn - drawn_card after clear: {self.state.drawn_card}")
 
         # Trigger checkpoint for turn change
         self._trigger_checkpoint()
@@ -884,12 +919,13 @@ class CaboGame:
         # Calculate scores
         scores = [(player.player_id, player.name, player.get_score())
                   for player in self.players]
-        
+
         # Sort by score first, then cabo caller wins ties
         # If cabo_caller has same score as others, they win
         scores.sort(key=lambda x: (x[2], x[0] != self.state.cabo_caller))
 
-        self.state.winner = scores[0][0]  # Player with lowest score (and cabo caller on ties) wins
+        # Player with lowest score (and cabo caller on ties) wins
+        self.state.winner = scores[0][0]
 
         # Prepare revealed hands for all players
         player_hands = {}
@@ -958,7 +994,8 @@ class CaboGame:
             self.state.phase = GamePhase.TURN_TRANSITION
             self.state.turn_transition_timer_id = self._schedule_timeout(
                 TurnTransitionTimeoutMessage(), 5.0)
-            print(f"DEBUG: Scheduled turn transition timeout, drawn_card is: {self.state.drawn_card}")
+            print(
+                f"DEBUG: Scheduled turn transition timeout, drawn_card is: {self.state.drawn_card}")
             return GameEvent("game_phase_changed", {
                 "phase": "turn_transition",
                 "current_player": self.get_current_player().player_id
@@ -995,7 +1032,7 @@ class CaboGame:
         # Add card to visibility
         if player.player_id not in self.state.card_visibility:
             self.state.card_visibility[player.player_id] = []
-        
+
         entry = (player.player_id, message.card_index)
         if entry not in self.state.card_visibility[player.player_id]:
             self.state.card_visibility[player.player_id].append(entry)
@@ -1007,9 +1044,10 @@ class CaboGame:
             "player": player.name,
             "player_id": player.player_id,
             "card_index": message.card_index,
+            "card_id": player.hand[message.card_index].identity,
             "card": str(player.hand[message.card_index])
         }))
-        
+
         # Transition to next phase (stack or turn transition)
         phase_event = self._transition_after_special_action()
         events.append(phase_event)
@@ -1045,7 +1083,7 @@ class CaboGame:
         # Add opponent's card to viewer's visibility
         if message.player_id not in self.state.card_visibility:
             self.state.card_visibility[message.player_id] = []
-        
+
         entry = (message.target_player_id, message.card_index)
         if entry not in self.state.card_visibility[message.player_id]:
             self.state.card_visibility[message.player_id].append(entry)
@@ -1059,9 +1097,10 @@ class CaboGame:
             "target": target_player.name,
             "target_id": target_player.player_id,
             "card_index": message.card_index,
+            "card_id": viewed_card.identity,
             "card": str(viewed_card)
         }))
-        
+
         # Transition to next phase (stack or turn transition)
         phase_event = self._transition_after_special_action()
         events.append(phase_event)
@@ -1100,7 +1139,7 @@ class CaboGame:
 
         player.hand[message.own_index] = target_card
         target_player.hand[message.target_index] = player_card
-        
+
         # Update visibility tracking for all players who can see the swapped cards
         for viewer_id in self.state.card_visibility:
             updated_visibility = []
@@ -1108,10 +1147,12 @@ class CaboGame:
                 # Check if this visibility entry is affected by the swap
                 if viewed_player_id == message.player_id and viewed_index == message.own_index:
                     # This viewer sees player's card that's now at target location
-                    updated_visibility.append((message.target_player_id, message.target_index))
+                    updated_visibility.append(
+                        (message.target_player_id, message.target_index))
                 elif viewed_player_id == message.target_player_id and viewed_index == message.target_index:
                     # This viewer sees target's card that's now at player location
-                    updated_visibility.append((message.player_id, message.own_index))
+                    updated_visibility.append(
+                        (message.player_id, message.own_index))
                 else:
                     # This visibility entry is not affected by the swap
                     updated_visibility.append((viewed_player_id, viewed_index))
@@ -1126,12 +1167,15 @@ class CaboGame:
             "target": target_player.name,
             "target_id": target_player.player_id,
             "player_card": str(player_card),
+            "player_card_id": player_card.identity,
             "target_card": str(target_card),
+            "target_card_id": target_card.identity,
             "player_index": message.own_index,
             "target_index": message.target_index,
-            "updated_visibility": dict(self.state.card_visibility)  # Send all updated visibilities
+            # Send all updated visibilities
+            "updated_visibility": dict(self.state.card_visibility)
         }))
-        
+
         # Transition to next phase (stack or turn transition)
         phase_event = self._transition_after_special_action()
         events.append(phase_event)
@@ -1159,7 +1203,7 @@ class CaboGame:
             "player": self.get_player_by_id(message.player_id).name,
             "player_id": message.player_id
         }))
-        
+
         # Transition to next phase (stack or turn transition)
         phase_event = self._transition_after_special_action()
         events.append(phase_event)
@@ -1192,7 +1236,7 @@ class CaboGame:
         # Add card to viewer's visibility
         if message.player_id not in self.state.card_visibility:
             self.state.card_visibility[message.player_id] = []
-        
+
         entry = (message.target_player_id, message.card_index)
         if entry not in self.state.card_visibility[message.player_id]:
             self.state.card_visibility[message.player_id].append(entry)
@@ -1207,9 +1251,10 @@ class CaboGame:
             "target": target_player.name,
             "target_id": message.target_player_id,
             "card_index": message.card_index,
+            "card_id": self.state.king_viewed_card.identity,
             "card": str(self.state.king_viewed_card)
         }))
-        
+
         events.append(GameEvent("game_phase_changed", {
             "phase": "king_swap_phase",
             "current_player": self.get_current_player().player_id
@@ -1246,7 +1291,7 @@ class CaboGame:
 
         player.hand[message.own_index] = target_card
         target_player.hand[message.target_index] = player_card
-        
+
         # Update visibility tracking for ALL viewers who can see the swapped cards
         # This ensures cards remain visible at their new locations
         # IMPORTANT: Only update visibility for the EXACT cards that were swapped
@@ -1256,10 +1301,12 @@ class CaboGame:
                 # Get the card that WAS at this position before the swap
                 if viewed_player_id == message.player_id and viewed_index == message.own_index:
                     # This viewer was seeing player_card which is now at target location
-                    updated_visibility.append((message.target_player_id, message.target_index))
+                    updated_visibility.append(
+                        (message.target_player_id, message.target_index))
                 elif viewed_player_id == message.target_player_id and viewed_index == message.target_index:
                     # This viewer was seeing target_card which is now at player location
-                    updated_visibility.append((message.player_id, message.own_index))
+                    updated_visibility.append(
+                        (message.player_id, message.own_index))
                 else:
                     # This visibility entry is not affected by the swap
                     updated_visibility.append((viewed_player_id, viewed_index))
@@ -1275,12 +1322,15 @@ class CaboGame:
             "target": target_player.name,
             "target_id": target_player.player_id,
             "player_card": str(player_card),
+            "player_card_id": player_card.identity,
             "target_card": str(target_card),
+            "target_card_id": target_card.identity,
             "player_index": message.own_index,
             "target_index": message.target_index,
-            "updated_visibility": dict(self.state.card_visibility)  # Send all updated visibilities
+            # Send all updated visibilities
+            "updated_visibility": dict(self.state.card_visibility)
         }))
-        
+
         # Transition to next phase (stack or turn transition)
         phase_event = self._transition_after_special_action()
         events.append(phase_event)
@@ -1306,7 +1356,7 @@ class CaboGame:
             "player": self.get_player_by_id(message.player_id).name,
             "player_id": message.player_id
         }))
-        
+
         # Transition to next phase (stack or turn transition)
         phase_event = self._transition_after_special_action()
         events.append(phase_event)
@@ -1324,7 +1374,7 @@ class CaboGame:
 
         events = []
         events.append(GameEvent("special_action_timeout", {}))
-        
+
         # Transition to next phase (stack or turn transition)
         phase_event = self._transition_after_special_action()
         events.append(phase_event)
@@ -1343,7 +1393,7 @@ class CaboGame:
 
         # Clear initial card visibility (players can no longer see their initial cards)
         self.state.card_visibility.clear()
-        
+
         # Clear any leftover state from setup
         self.state.drawn_card = None
         self.state.played_card = None
@@ -1404,30 +1454,33 @@ class CaboGame:
                     "name": player.name,
                     "cards": [
                         {
-                            "id": f"{player.player_id}_{i}",
+                            "id": card.identity,  # Use stable card identity
                             "rank": card.rank.value if hasattr(card.rank, 'value') else card.rank,
                             "suit": card.suit.value if card.suit and hasattr(card.suit, 'value') else card.suit
                         }
-                        for i, card in enumerate(player.hand)
+                        for card in player.hand
                     ],
                     "has_called_cabo": player.has_called_cabo
                 }
                 for player in self.players
             ],
             "deck_size": self.deck.size(),
+            # All card identities in deck
+            "deck_cards": [card.identity for card in self.deck.cards],
             "discard_top": {
-                "id": "discard_top",
+                # Use stable card identity
+                "id": self.discard_pile[-1].identity,
                 "rank": self.discard_pile[-1].rank.value if hasattr(self.discard_pile[-1].rank, 'value') else self.discard_pile[-1].rank,
                 "suit": self.discard_pile[-1].suit.value if self.discard_pile[-1].suit and hasattr(self.discard_pile[-1].suit, 'value') else self.discard_pile[-1].suit
             } if self.discard_pile else None,
             "drawn_card": {
-                "id": "drawn_card",
+                "id": self.state.drawn_card.identity,  # Use stable card identity
                 "rank": self.state.drawn_card.rank.value if hasattr(self.state.drawn_card.rank, 'value') else self.state.drawn_card.rank,
                 "suit": self.state.drawn_card.suit.value if self.state.drawn_card.suit and hasattr(self.state.drawn_card.suit, 'value') else self.state.drawn_card.suit,
                 "for_player": self.get_current_player().player_id  # Who can see it
             } if self.state.drawn_card else None,
             "played_card": {
-                "id": "played_card",
+                "id": self.state.played_card.identity,  # Use stable card identity
                 "rank": self.state.played_card.rank.value if hasattr(self.state.played_card.rank, 'value') else self.state.played_card.rank,
                 "suit": self.state.played_card.suit.value if self.state.played_card.suit and hasattr(self.state.played_card.suit, 'value') else self.state.played_card.suit
             } if self.state.played_card else None,
