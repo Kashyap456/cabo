@@ -810,6 +810,8 @@ class CaboGame:
                     "player": player.name,
                     "player_id": player.player_id,
                     "attempted_card": str(stack_card),
+                    "target_player_id": message.target_player_id,
+                    "target_player_index": message.card_index,
                     "penalty_card": str(drawn_card) if drawn_card else None,
                     "penalty_card_id": drawn_card.identity if drawn_card else None
                 }),

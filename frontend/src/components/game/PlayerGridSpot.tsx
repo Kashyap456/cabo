@@ -146,28 +146,30 @@ const PlayerGridSpot = ({
         {/* Grid container for cards - 2x3 grid layout */}
         <div
           className={cn(
-            'grid grid-cols-2 gap-2 place-items-center',
-            cards.length <= 2 && 'grid-rows-1',
-            cards.length > 2 && cards.length <= 4 && 'grid-rows-2',
-            cards.length > 4 && 'grid-rows-3',
-            cards.length > 6 && 'grid-rows-4',
-            cards.length > 8 && 'grid-rows-5',
-            cards.length > 10 && 'grid-rows-6',
-            cards.length > 12 && 'grid-rows-7',
-            cards.length > 14 && 'grid-rows-8',
-            cards.length > 16 && 'grid-rows-9',
-            cards.length > 18 && 'grid-rows-10',
-            cards.length > 20 && 'grid-rows-11',
+            'grid grid-rows-2 gap-2 place-items-center',
+            cards.length <= 2 && 'grid-cols-1',
+            cards.length > 2 && cards.length <= 4 && 'grid-cols-2',
+            cards.length > 4 && 'grid-cols-3',
+            cards.length > 6 && 'grid-cols-4',
+            cards.length > 8 && 'grid-cols-5',
+            cards.length > 10 && 'grid-cols-6',
+            cards.length > 12 && 'grid-cols-7',
+            cards.length > 14 && 'grid-cols-8',
+            cards.length > 16 && 'grid-cols-9',
+            cards.length > 18 && 'grid-cols-10',
+            cards.length > 20 && 'grid-cols-11',
           )}
         >
           {cards.map((card, index) => {
             return (
               <AnimatePresence key={card.id}>
-                <motion.div 
+                <motion.div
                   className={cn(
-                    "relative transition-all duration-200",
-                    card.isSelected && "scale-110 z-20",
-                    card.isSelectable && !card.isSelected && "hover:scale-105 cursor-pointer"
+                    'relative transition-all duration-200',
+                    card.isSelected && 'scale-110 z-20',
+                    card.isSelectable &&
+                      !card.isSelected &&
+                      'hover:scale-105 cursor-pointer',
                   )}
                   whileHover={card.isSelectable ? { scale: 1.05 } : {}}
                   whileTap={card.isSelectable ? { scale: 0.95 } : {}}
@@ -180,12 +182,12 @@ const PlayerGridSpot = ({
                       className="absolute inset-0 ring-4 ring-yellow-400 rounded-lg z-10 pointer-events-none"
                     />
                   )}
-                  
+
                   {/* Selectable hint ring */}
                   {card.isSelectable && !card.isSelected && (
                     <div className="absolute inset-0 ring-2 ring-blue-400/50 rounded-lg pointer-events-none" />
                   )}
-                  
+
                   <AnimatedCard
                     cardId={card.id} // Pass card ID for layoutId animations
                     value={card.value}
@@ -194,7 +196,7 @@ const PlayerGridSpot = ({
                     isSelected={card.isSelected}
                     onClick={onCardClick ? () => onCardClick(index) : undefined}
                   />
-                  
+
                   {/* Selection badge */}
                   {card.isSelected && (
                     <motion.div
