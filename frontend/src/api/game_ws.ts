@@ -1,6 +1,5 @@
 import useWebSocket, { ReadyState } from 'react-use-websocket'
 import { useCallback, useEffect } from 'react'
-import * as React from 'react'
 
 import { useRoomStore, type Player, RoomPhase } from '@/stores/game_state'
 import { useGamePlayStore, GamePhase, Suit, type Card as GameCard } from '@/stores/game_play_state'
@@ -188,7 +187,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     updatePlayerCards,
     setPlayers,
     addVisibleCard,
-    setDeckCards
+    setDeckCards,
+    setClearDrawnCard
   } = useGamePlayStore.getState()
 
 
@@ -342,12 +342,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     case 'card_drawn': {
       console.log('Card drawn by player:', gameEvent.data.player_id, 'card_id:', gameEvent.data.card_id)
       const currentUserId = useAuthStore.getState().sessionId
-      
-      // Remove card from deck (for animation)
-      if (gameEvent.data.card_id) {
-        const currentDeck = useGamePlayStore.getState().deckCards.filter(id => id !== gameEvent.data.card_id)
-        setDeckCards(currentDeck)
-      }
 
       const cardData = gameEvent.data.card
       const cardId = gameEvent.data.card_id
@@ -358,13 +352,16 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
       const parsedCard = parseCardString(cardData, cardId)
       setDrawnCard({ ...parsedCard, id: cardId, isTemporarilyViewed: gameEvent.data.player_id === currentUserId })
+
+      // Remove card from deck (for animation)
+      if (gameEvent.data.card_id) {
+        const currentDeck = useGamePlayStore.getState().deckCards.filter(id => id !== gameEvent.data.card_id)
+        setDeckCards(currentDeck)
+      }
       break
     }
 
-    case 'card_played': {
-      console.log('Card played:', gameEvent.data.card, 'by player:', gameEvent.data.player_id, 'card_id:', gameEvent.data.card_id)
-      const currentUserId = useAuthStore.getState().sessionId
-      
+    case 'card_played': {      
       if (gameEvent.data.card && gameEvent.data.card !== 'hidden') {
         const cardData = gameEvent.data.card
         const cardId = gameEvent.data.card_id
@@ -383,10 +380,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'card_replaced_and_played': {
-      console.log('Card replaced and played by:', gameEvent.data.player_id, 
-        'played_card_id:', gameEvent.data.played_card_id, 
-        'drawn_card_id:', gameEvent.data.drawn_card_id)
-      
       if (gameEvent.data.played_card) {
         const cardData = gameEvent.data.played_card
         const cardId = gameEvent.data.played_card_id
@@ -399,9 +392,32 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         addCardToDiscard(parsedCard)
       }
       
-      // The drawn card goes to the player's hand (tracked in player cards update)
-      // Clear drawn card if the current player used replace and play
-      setDrawnCard(null)
+      // Update the player's hand to show the drawn card at the replaced position
+      if (gameEvent.data.hand_index !== undefined && gameEvent.data.drawn_card_id) {
+        const player = getPlayerById(gameEvent.data.player_id)
+        const drawnCardState = useGamePlayStore.getState().drawnCard
+        
+        if (player && drawnCardState) {
+          // Create a copy of the player's cards
+          const updatedCards = [...player.cards]
+          
+          // Replace the card at the specified index with the drawn card
+          // Keep the same card ID to maintain layoutId for animation
+          updatedCards[gameEvent.data.hand_index] = {
+            ...drawnCardState,
+            id: gameEvent.data.drawn_card_id,
+            isTemporarilyViewed: false
+          }
+          
+          // Update the player's cards
+          setTimeout(() => {
+            updatePlayerCards(gameEvent.data.player_id, updatedCards)
+            setTimeout(() => {
+              setDrawnCard(null)
+            }, 500)
+          }, 500)
+        }
+      }
       break
     }
 
@@ -954,7 +970,10 @@ export const useGameWebSocket = () => {
       try {
         const messageStr = JSON.stringify(message)
         sendMessage(messageStr)
-        console.log('Sent WebSocket message:', message.type)
+        // Only log non-ping/pong messages
+        if (message.type !== 'ping' && message.type !== 'pong') {
+          console.log('Sent WebSocket message:', message.type)
+        }
       } catch (error) {
         console.error('Failed to send WebSocket message:', error, message)
       }
@@ -964,7 +983,10 @@ export const useGameWebSocket = () => {
   }, [sendMessage, readyState])
 
   const handleMessage = useCallback((message: WebSocketMessage) => {
-    console.log('Received WebSocket message:', message.type)
+    // Only log non-ping/pong messages
+    if (message.type !== 'ping' && message.type !== 'pong') {
+      console.log('Received WebSocket message:', message.type)
+    }
     
     // Handle sequence number deduplication
     if (message.seq_num !== undefined) {

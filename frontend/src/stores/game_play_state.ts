@@ -125,6 +125,9 @@ export interface GamePlayState {
   // Endgame state
   endGameData: EndGameData | null
   
+  // Drawn card state
+  clearDrawnCard: boolean
+  
   // Actions
   setCurrentPlayer: (playerId: string) => void
   setPhase: (phase: GamePhase) => void
@@ -145,6 +148,7 @@ export interface GamePlayState {
   setEndGameData: (data: EndGameData) => void
   updateCountdown: (seconds: number) => void
   setDeckCards: (cardIds: string[]) => void
+  setClearDrawnCard: (shouldClear: boolean) => void
   
   // Helper functions
   getCurrentPlayer: () => PlayerGameState | null
@@ -171,6 +175,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   caboCalledBy: null,
   finalRoundStarted: false,
   endGameData: null,
+  clearDrawnCard: false,
   
   // Actions
   setCurrentPlayer: (playerId) => set((state) => {
@@ -279,6 +284,8 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   setEndGameData: (data) => set({ endGameData: data }),
   
   setDeckCards: (cardIds) => set({ deckCards: cardIds }),
+
+  setClearDrawnCard: (shouldClear) => set({ clearDrawnCard: shouldClear }),
   
   updateCountdown: (seconds) => set((state) => ({
     endGameData: state.endGameData ? { ...state.endGameData, countdownSeconds: seconds } : null
@@ -373,17 +380,7 @@ export const createKnownCard = (id: string, rank: Rank, suit: Suit | null, isTem
   isTemporarilyViewed
 })
 
-export const isCardKnown = (card: Card): boolean => {
-  return card.rank !== '?' && card.suit !== '?'
-}
-
-export const getCardDisplayValue = (card: Card, alwaysShow = false): string => {
-  // Check if we should show the card value
-  if (!isCardKnown(card)) return '?'
-  
-  // For player cards, only show if temporarily viewed or if alwaysShow is true
-  if (!alwaysShow && !card.isTemporarilyViewed) return '?'
-  
+export const getCardDisplayValue = (card: Card): string => {
   if (card.rank === Rank.JOKER) return 'Joker'
   
   const suitSymbol = {
@@ -397,8 +394,6 @@ export const getCardDisplayValue = (card: Card, alwaysShow = false): string => {
 }
 
 export const getCardValue = (card: Card): number => {
-  if (!isCardKnown(card)) return 0
-  
   if (card.rank === Rank.JOKER) return 0
   if (card.rank === Rank.KING && (card.suit === Suit.HEARTS || card.suit === Suit.DIAMONDS)) {
     return -1  // Red Kings

@@ -1,8 +1,9 @@
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import AnimatedCard from './AnimatedCard'
 import { cn } from '@/lib/utils'
 
 interface PlayerGridSpotProps {
+  playerId: string
   nickname: string
   isHost?: boolean
   isCurrentPlayer?: boolean
@@ -33,6 +34,7 @@ interface PlayerGridSpotProps {
 // This creates a natural 2x3 grid for up to 6 cards
 
 const PlayerGridSpot = ({
+  playerId,
   nickname,
   isHost = false,
   isCurrentPlayer = false,
@@ -133,17 +135,12 @@ const PlayerGridSpot = ({
       {/* Cards container - grid layout */}
       <motion.div
         className="absolute"
-        initial={{ opacity: 0, scale: 0, rotate: angleFromCenter }}
-        animate={{
-          opacity: 1,
-          scale: 1,
-          rotate: angleFromCenter,
-        }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         style={{
           left: `${cardXPercent}%`,
           top: `${cardYPercent}%`,
           translate: '-50% -50%',
+          rotate: angleFromCenter,
         }}
       >
         {/* Flexbox container for cards - 2x3 grid layout using flex wrap */}
@@ -155,48 +152,50 @@ const PlayerGridSpot = ({
         >
           {cards.map((card, index) => {
             return (
-              <motion.div
-                key={card.id}
-                className={cn(
-                  'relative transition-all duration-200 w-12 h-18',
-                  card.isSelected && 'ring-4 ring-yellow-400 rounded-lg z-20',
-                  card.isSelectable &&
-                    !card.isSelected &&
-                    'hover:ring-2 hover:ring-blue-400 rounded-lg cursor-pointer',
-                )}
-                style={{
-                  zIndex: card.isSelected ? 20 : card.isSelectable ? 10 : 1,
-                }}
-                initial={{ scale: 0, rotate: 180 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{
-                  delay: index * 0.05,
-                  type: 'spring',
-                  stiffness: 300,
-                  damping: 20,
-                }}
-                whileHover={card.isSelectable ? { scale: 1.1, y: -5 } : {}}
-                whileTap={card.isSelectable ? { scale: 0.95 } : {}}
-              >
-                <AnimatedCard
-                  cardId={card.id} // Pass card ID for layoutId animations
-                  value={card.value}
-                  suit={card.suit}
-                  isFaceDown={card.isFaceDown}
-                  className="w-full h-full"
-                  onClick={onCardClick ? () => onCardClick(index) : undefined}
-                />
-                {/* Selection indicator */}
-                {card.isSelected && (
-                  <motion.div
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="absolute -top-6 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-1.5 py-0.5 rounded text-xs font-bold"
-                  >
-                    SEL
-                  </motion.div>
-                )}
-              </motion.div>
+              <AnimatePresence>
+                <motion.div
+                  key={playerId + '-' + index}
+                  className={cn(
+                    'relative transition-all duration-200 w-12 h-18',
+                    card.isSelected && 'ring-4 ring-yellow-400 rounded-lg z-20',
+                    card.isSelectable &&
+                      !card.isSelected &&
+                      'hover:ring-2 hover:ring-blue-400 rounded-lg cursor-pointer',
+                  )}
+                  style={{
+                    zIndex: card.isSelected ? 20 : card.isSelectable ? 10 : 1,
+                  }}
+                  initial={{ scale: 0, rotate: 180 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{
+                    delay: index * 0.05,
+                    type: 'spring',
+                    stiffness: 300,
+                    damping: 20,
+                  }}
+                  whileHover={card.isSelectable ? { scale: 1.1, y: -5 } : {}}
+                  whileTap={card.isSelectable ? { scale: 0.95 } : {}}
+                >
+                  <AnimatedCard
+                    cardId={card.id} // Pass card ID for layoutId animations
+                    value={card.value}
+                    suit={card.suit}
+                    isFaceDown={card.isFaceDown}
+                    className="w-full h-full"
+                    onClick={onCardClick ? () => onCardClick(index) : undefined}
+                  />
+                  {/* Selection indicator */}
+                  {card.isSelected && (
+                    <motion.div
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="absolute -top-6 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-1.5 py-0.5 rounded text-xs font-bold"
+                    >
+                      SEL
+                    </motion.div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
             )
           })}
         </div>

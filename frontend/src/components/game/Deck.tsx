@@ -103,17 +103,16 @@ const Deck = ({
           )}
 
           {/* Discard pile cards */}
-          <AnimatePresence>
-            {topDiscardCard && (
-              <AnimatedCard
-                cardId={topDiscardCard.id}
-                value={topDiscardCard.value}
-                suit={topDiscardCard.suit}
-                isFaceDown={false}
-                className="w-12 h-18"
-              />
-            )}
-          </AnimatePresence>
+          {topDiscardCard && (
+            <AnimatedCard
+              key={topDiscardCard.id}
+              cardId={topDiscardCard.id}
+              value={topDiscardCard.value}
+              suit={topDiscardCard.suit}
+              isFaceDown={false}
+              className="w-12 h-18"
+            />
+          )}
         </div>
       </motion.div>
     </div>

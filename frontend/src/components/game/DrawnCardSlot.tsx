@@ -32,7 +32,7 @@ const DrawnCardSlot = ({
 
       {/* Card slot */}
       <div className="relative w-card h-card">
-        <AnimatePresence>
+        <AnimatePresence initial={false} mode="popLayout">
           {drawnCard ? (
             <AnimatedCard
               key={drawnCard.id || 'drawn-card'}
@@ -42,7 +42,7 @@ const DrawnCardSlot = ({
               isFaceDown={drawnCard.isFaceDown !== false}
               isFlipped={false} // Never use the flip that mirrors
               className="w-12 h-18 absolute inset-0"
-              onClick={isCurrentPlayer ? onCardClick : undefined}
+              onClick={onCardClick}
             />
           ) : (
             // Empty slot placeholder

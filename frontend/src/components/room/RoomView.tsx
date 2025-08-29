@@ -185,67 +185,62 @@ export default function RoomView() {
 
         {/* Players positioned around the table */}
         <div className="absolute inset-0">
-          <AnimatePresence mode="wait">
-            {displayPlayers.map((player, index) => {
-              const roomPlayer = players.find((p) => p.id === player.id)
-              const cards = isInGame && 'cards' in player ? player.cards : []
+          {displayPlayers.map((player, index) => {
+            const roomPlayer = players.find((p) => p.id === player.id)
+            const cards = isInGame && 'cards' in player ? player.cards : []
 
-              return (
-                <PlayerGridSpot
-                  key={player.id}
-                  nickname={
-                    player.nickname || roomPlayer?.nickname || 'Unknown'
-                  }
-                  isHost={roomPlayer?.isHost || false}
-                  isCurrentPlayer={player.id === sessionId}
-                  isTurn={
-                    isInGame && player.id === gamePlayState.currentPlayerId
-                  }
-                  position={positions[index]}
-                  tableDimensions={tableDimensions}
-                  cards={cards.map((card: any, cardIndex: number) => ({
-                    id: card.id, // Pass through the card ID for animations
-                    value: isCardVisible(player.id, cardIndex, card)
-                      ? card.rank
-                      : undefined,
-                    suit: isCardVisible(player.id, cardIndex, card)
-                      ? card.suit
-                      : undefined,
-                    isFaceDown: !isCardVisible(player.id, cardIndex, card),
-                    isSelected:
-                      isInGame &&
-                      gamePlayState.selectedCards.some(
-                        (s) =>
-                          s.playerId === player.id && s.cardIndex === cardIndex,
-                      ),
-                    isSelectable:
-                      isInGame &&
-                      // Selectable for special actions
-                      (gamePlayState.isCardSelectable(
-                        player.id,
-                        cardIndex,
-                        sessionId,
-                      ) ||
-                        // Selectable for card replacement when it's our turn and we have a drawn card
-                        (player.id === sessionId &&
-                          gamePlayState.drawnCard &&
-                          isMyTurn &&
-                          gamePhase === GamePhase.CARD_DRAWN)),
-                  }))}
-                  onCardClick={
-                    isInGame
-                      ? (cardIndex) => handleHandCardClick(player.id, cardIndex)
-                      : undefined
-                  }
-                />
-              )
-            })}
-          </AnimatePresence>
+            return (
+              <PlayerGridSpot
+                key={player.id}
+                playerId={player.id}
+                nickname={player.nickname || roomPlayer?.nickname || 'Unknown'}
+                isHost={roomPlayer?.isHost || false}
+                isCurrentPlayer={player.id === sessionId}
+                isTurn={isInGame && player.id === gamePlayState.currentPlayerId}
+                position={positions[index]}
+                tableDimensions={tableDimensions}
+                cards={cards.map((card: any, cardIndex: number) => ({
+                  id: card.id, // Pass through the card ID for animations
+                  value: isCardVisible(player.id, cardIndex, card)
+                    ? card.rank
+                    : undefined,
+                  suit: isCardVisible(player.id, cardIndex, card)
+                    ? card.suit
+                    : undefined,
+                  isFaceDown: !isCardVisible(player.id, cardIndex, card),
+                  isSelected:
+                    isInGame &&
+                    gamePlayState.selectedCards.some(
+                      (s) =>
+                        s.playerId === player.id && s.cardIndex === cardIndex,
+                    ),
+                  isSelectable:
+                    isInGame &&
+                    // Selectable for special actions
+                    (gamePlayState.isCardSelectable(
+                      player.id,
+                      cardIndex,
+                      sessionId,
+                    ) ||
+                      // Selectable for card replacement when it's our turn and we have a drawn card
+                      (player.id === sessionId &&
+                        gamePlayState.drawnCard &&
+                        isMyTurn &&
+                        gamePhase === GamePhase.CARD_DRAWN)),
+                }))}
+                onCardClick={
+                  isInGame
+                    ? (cardIndex) => handleHandCardClick(player.id, cardIndex)
+                    : undefined
+                }
+              />
+            )
+          })}
         </div>
 
         {/* Center content - changes based on phase */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {/* Waiting phase content */}
             {roomPhase === RoomPhase.WAITING && (
               <motion.div

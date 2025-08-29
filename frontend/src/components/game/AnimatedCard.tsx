@@ -110,9 +110,13 @@ const AnimatedCard = ({
 
   const cardFace = (
     <div
-      className={
-        'w-12 h-18 bg-white border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center shadow-lg'
-      }
+      className={cn(
+        'w-12 h-18 bg-white border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center shadow-lg',
+        getSuitColor(),
+        isJoker && suit === 'spades' && 'bg-black',
+        isJoker && suit === 'hearts' && 'bg-red-500',
+        className,
+      )}
     >
       {isJoker ? (
         <div className="text-4xl">🃏</div>
@@ -126,74 +130,42 @@ const AnimatedCard = ({
   )
 
   return (
+    // OUTER: shared-layout container, no custom transforms
     <motion.div
-      layoutId={cardId} // Enable automatic FLIP animations
+      layoutId={cardId}
       layout
-      className={cn(
-        'cursor-pointer preserve-3d',
-        'w-12 h-18', // Default width if not specified
-        !className?.includes('h-') && 'h-card', // Default height if not specified
-        isAnimatingFlip && 'pointer-events-none',
-        isSelected && 'ring-4 ring-yellow-400',
-        className,
-      )}
-      initial={{
-        scale: 0,
-        opacity: 0,
-      }}
-      animate={{
-        rotateY: isFlipped ? 180 : 0,
-        scale: isSelected ? 1.05 : 1,
-        opacity: 1,
-      }}
-      exit={{
-        scale: 0,
-        opacity: 0,
-      }}
-      transition={{
-        layout: {
-          type: 'spring',
-          stiffness: 300,
-          damping: 30,
-        },
-        scale: {
-          type: 'spring',
-          stiffness: 300,
-          damping: 30,
-          delay: animationDelay,
-        },
-        opacity: {
-          duration: 0.2,
-          delay: animationDelay,
-        },
-      }}
+      initial={false}
+      animate={{ scale: isSelected ? 1.05 : 1, opacity: 1 }}
+      // Only apply exit animation if there's no layoutId (no FLIP animation)
+      exit={cardId ? undefined : { opacity: 0 }}
+      className={cn('w-12 h-18', className)}
+      whileHover={{ scale: 1.05, cursor: 'pointer' }}
+      whileTap={{ scale: 0.95, cursor: 'pointer' }}
       onClick={onClick}
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      style={{ transformStyle: 'preserve-3d' }}
     >
-      <AnimatePresence mode="wait">
+      {/* INNER: flip-only wrapper */}
+      <AnimatePresence mode="popLayout" initial={false}>
         {showFace ? (
           <motion.div
             key="face"
-            className="w-full h-full"
             initial={{ rotateY: -90 }}
             animate={{ rotateY: 0 }}
             exit={{ rotateY: 90 }}
             transition={{ duration: 0.3 }}
             style={{ transformStyle: 'preserve-3d' }}
+            className="w-full h-full"
           >
             {cardFace}
           </motion.div>
         ) : (
           <motion.div
             key="back"
-            className="w-full h-full"
             initial={{ rotateY: 90 }}
             animate={{ rotateY: 0 }}
             exit={{ rotateY: -90 }}
             transition={{ duration: 0.3 }}
             style={{ transformStyle: 'preserve-3d' }}
+            className="w-full h-full"
           >
             {cardBack}
           </motion.div>
