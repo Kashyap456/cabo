@@ -4,63 +4,67 @@ import { useGameWebSocket } from '../../api/game_ws'
 import { useCallback, useState, useEffect } from 'react'
 
 export default function ActionPanel() {
-  const { 
-    phase, 
-    currentPlayerId, 
-    players, 
+  const {
+    phase,
+    currentPlayerId,
+    players,
     drawnCard,
     specialAction,
-    stackCaller
+    stackCaller,
   } = useGamePlayStore()
 
   const { sessionId } = useAuthStore()
   const { sendMessage } = useGameWebSocket()
-  
+
   const currentPlayer = players.find((p) => p.id === sessionId)
   const isMyTurn = currentPlayer && currentPlayer.id === currentPlayerId
-  
 
   // Determine button states
   const canCallStack = () => {
     // Can call stack during turn_transition or waiting_for_special_action phases
     // But not if already in stack_called phase
-    return (phase === GamePhase.TURN_TRANSITION || 
-            phase === GamePhase.WAITING_FOR_SPECIAL_ACTION ||
-            phase === GamePhase.KING_VIEW_PHASE ||
-            phase === GamePhase.KING_SWAP_PHASE) &&
-           phase !== GamePhase.STACK_CALLED
+    return (
+      (phase === GamePhase.TURN_TRANSITION ||
+        phase === GamePhase.WAITING_FOR_SPECIAL_ACTION ||
+        phase === GamePhase.KING_VIEW_PHASE ||
+        phase === GamePhase.KING_SWAP_PHASE) &&
+      !stackCaller
+    )
   }
 
   const canSkip = () => {
     // Can skip during J/Q swap (swap_opponent) or king_swap_phase
     if (!isMyTurn || !specialAction) return false
-    
-    return (specialAction.type === 'SWAP_CARDS' && 
-            phase === GamePhase.WAITING_FOR_SPECIAL_ACTION) ||
-           (phase === GamePhase.KING_SWAP_PHASE)
+
+    return (
+      (specialAction.type === 'SWAP_CARDS' &&
+        phase === GamePhase.WAITING_FOR_SPECIAL_ACTION) ||
+      phase === GamePhase.KING_SWAP_PHASE
+    )
   }
 
   const canCallCabo = () => {
     // Can only call cabo at the start of turn before drawing
-    return isMyTurn && 
-           phase === GamePhase.DRAW_PHASE && 
-           !drawnCard &&
-           !players.some(p => p.hasCalledCabo)
+    return (
+      isMyTurn &&
+      phase === GamePhase.DRAW_PHASE &&
+      !drawnCard &&
+      !players.some((p) => p.hasCalledCabo)
+    )
   }
 
   // Handle Stack button click
   const handleStack = useCallback(() => {
     if (!canCallStack()) return
-    
+
     // Just call stack - wait for backend to tell us if we won the race
     sendMessage({ type: 'call_stack' })
   }, [sendMessage, canCallStack])
 
-
   // Handle Skip button click
   const handleSkip = useCallback(() => {
     if (!canSkip()) return
-    
+
     if (phase === GamePhase.KING_SWAP_PHASE) {
       // King swap skip
       sendMessage({ type: 'king_skip_swap' })
@@ -73,10 +77,9 @@ export default function ActionPanel() {
   // Handle Cabo button click
   const handleCabo = useCallback(() => {
     if (!canCallCabo()) return
-    
+
     sendMessage({ type: 'call_cabo' })
   }, [sendMessage, canCallCabo])
-
 
   if (!currentPlayer) {
     return (
@@ -88,15 +91,15 @@ export default function ActionPanel() {
   }
 
   return (
-    <div 
+    <div
       className="rounded-lg border-2 border-yellow-600/60 p-3"
       style={{
-        background: 'linear-gradient(180deg, rgba(139, 69, 19, 0.95) 0%, rgba(101, 67, 33, 0.95) 100%)',
+        background:
+          'linear-gradient(180deg, rgba(139, 69, 19, 0.95) 0%, rgba(101, 67, 33, 0.95) 100%)',
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
       }}
     >
       <div className="flex flex-col gap-2">
-        
         {/* Action buttons with wood/casino styling */}
         <button
           onClick={handleStack}
@@ -107,10 +110,10 @@ export default function ActionPanel() {
               : 'cursor-not-allowed opacity-40'
           }`}
           style={{
-            background: canCallStack() 
+            background: canCallStack()
               ? 'linear-gradient(180deg, #FF8C00 0%, #FF6F00 50%, #E65100 100%)'
               : 'linear-gradient(180deg, #424242 0%, #303030 100%)',
-            boxShadow: canCallStack() 
+            boxShadow: canCallStack()
               ? '0 4px 15px rgba(255, 140, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
               : 'none',
             border: '2px solid rgba(0, 0, 0, 0.2)',
@@ -129,17 +132,19 @@ export default function ActionPanel() {
               : 'cursor-not-allowed opacity-40'
           }`}
           style={{
-            background: canSkip() 
+            background: canSkip()
               ? 'linear-gradient(180deg, #FFD700 0%, #FFC107 50%, #FFA000 100%)'
               : 'linear-gradient(180deg, #424242 0%, #303030 100%)',
-            boxShadow: canSkip() 
+            boxShadow: canSkip()
               ? '0 4px 15px rgba(255, 215, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
               : 'none',
             border: '2px solid rgba(0, 0, 0, 0.2)',
             textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
           }}
         >
-          <span className={canSkip() ? 'text-amber-900' : 'text-white'}>SKIP</span>
+          <span className={canSkip() ? 'text-amber-900' : 'text-white'}>
+            SKIP
+          </span>
         </button>
 
         <button
@@ -151,10 +156,10 @@ export default function ActionPanel() {
               : 'cursor-not-allowed opacity-40'
           }`}
           style={{
-            background: canCallCabo() 
+            background: canCallCabo()
               ? 'linear-gradient(180deg, #DC143C 0%, #B71C1C 50%, #8B0000 100%)'
               : 'linear-gradient(180deg, #424242 0%, #303030 100%)',
-            boxShadow: canCallCabo() 
+            boxShadow: canCallCabo()
               ? '0 4px 20px rgba(220, 20, 60, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
               : 'none',
             border: '2px solid rgba(0, 0, 0, 0.3)',
@@ -169,20 +174,6 @@ export default function ActionPanel() {
             </span>
           )}
         </button>
-
-        {/* Stack selection indicator */}
-        {phase === GamePhase.STACK_CALLED && stackCaller?.playerId === sessionId && (
-          <div 
-            className="ml-4 px-4 py-1.5 rounded-lg border-2 border-yellow-400/60"
-            style={{
-              background: 'rgba(255, 193, 7, 0.1)',
-            }}
-          >
-            <span className="text-yellow-300 text-sm font-bold animate-pulse">
-              SELECT A CARD
-            </span>
-          </div>
-        )}
       </div>
     </div>
   )
@@ -191,26 +182,42 @@ export default function ActionPanel() {
 // Helper functions
 function getPhaseDisplay(phase: GamePhase): string {
   switch (phase) {
-    case GamePhase.SETUP: return 'Setup'
-    case GamePhase.DRAW_PHASE: return 'Draw Phase'
-    case GamePhase.CARD_DRAWN: return 'Play Card'
-    case GamePhase.WAITING_FOR_SPECIAL_ACTION: return 'Special Action'
-    case GamePhase.KING_VIEW_PHASE: return 'King View'
-    case GamePhase.KING_SWAP_PHASE: return 'King Swap'
-    case GamePhase.STACK_CALLED: return 'Stack Called'
-    case GamePhase.TURN_TRANSITION: return 'Turn Transition'
-    case GamePhase.ENDED: return 'Game Ended'
-    default: return phase
+    case GamePhase.SETUP:
+      return 'Setup'
+    case GamePhase.DRAW_PHASE:
+      return 'Draw Phase'
+    case GamePhase.CARD_DRAWN:
+      return 'Play Card'
+    case GamePhase.WAITING_FOR_SPECIAL_ACTION:
+      return 'Special Action'
+    case GamePhase.KING_VIEW_PHASE:
+      return 'King View'
+    case GamePhase.KING_SWAP_PHASE:
+      return 'King Swap'
+    case GamePhase.STACK_CALLED:
+      return 'Stack Called'
+    case GamePhase.TURN_TRANSITION:
+      return 'Turn Transition'
+    case GamePhase.ENDED:
+      return 'Game Ended'
+    default:
+      return phase
   }
 }
 
 function getSpecialActionDisplay(type: string): string {
   switch (type) {
-    case 'VIEW_OWN': return 'View Your Card (7/8)'
-    case 'VIEW_OPPONENT': return "View Opponent's Card (9/10)"
-    case 'SWAP_CARDS': return 'Swap Cards (J/Q)'
-    case 'KING_VIEW': return 'King - View Any Card'
-    case 'KING_SWAP': return 'King - Swap Cards'
-    default: return type
+    case 'VIEW_OWN':
+      return 'View Your Card (7/8)'
+    case 'VIEW_OPPONENT':
+      return "View Opponent's Card (9/10)"
+    case 'SWAP_CARDS':
+      return 'Swap Cards (J/Q)'
+    case 'KING_VIEW':
+      return 'King - View Any Card'
+    case 'KING_SWAP':
+      return 'King - Swap Cards'
+    default:
+      return type
   }
 }

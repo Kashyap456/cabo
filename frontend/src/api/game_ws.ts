@@ -188,7 +188,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     setPlayers,
     addVisibleCard,
     setDeckCards,
-    replaceAndPlayCard
+    replaceAndPlayCard,
+    swapCards
   } = useGamePlayStore.getState()
 
 
@@ -565,28 +566,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'cards_swapped': {
-      console.log('Cards swapped between:', gameEvent.data.player, 'and:', gameEvent.data.target)
-      const { updatePlayerCards, getPlayerById, setCardVisibility } = useGamePlayStore.getState()
-      const currentUserId = useAuthStore.getState().sessionId
-      
-      // Swap the cards in the frontend state
-      const player = getPlayerById(gameEvent.data.player_id)
-      const target = getPlayerById(gameEvent.data.target_id)
-      
-      if (player && target && gameEvent.data.player_index !== undefined && gameEvent.data.target_index !== undefined) {
-        // Make copies of the card arrays
-        const playerCards = [...player.cards]
-        const targetCards = [...target.cards]
-        
-        // Swap the cards at the specified indices
-        const tempCard = playerCards[gameEvent.data.player_index]
-        playerCards[gameEvent.data.player_index] = targetCards[gameEvent.data.target_index]
-        targetCards[gameEvent.data.target_index] = tempCard
-        
-        // Update both players' cards
-        updatePlayerCards(gameEvent.data.player_id, playerCards)
-        updatePlayerCards(gameEvent.data.target_id, targetCards)
-      }
+      swapCards(gameEvent.data.player_id, gameEvent.data.target_id, gameEvent.data.player_index, gameEvent.data.target_index)
       
       // Update visibility for all players affected by the swap
       if (gameEvent.data.updated_visibility) {
@@ -626,45 +606,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'king_cards_swapped': {
       console.log('King cards swapped between:', gameEvent.data.player, 'and:', gameEvent.data.target)
-      const { updatePlayerCards, getPlayerById, setCardVisibility } = useGamePlayStore.getState()
-      const currentUserId = useAuthStore.getState().sessionId
       
-      // Swap the cards in the frontend state
-      const player = getPlayerById(gameEvent.data.player_id)
-      const target = getPlayerById(gameEvent.data.target_id)
-      
-      if (player && target && gameEvent.data.player_index !== undefined && gameEvent.data.target_index !== undefined) {
-        // Make copies of the card arrays
-        const playerCards = [...player.cards]
-        const targetCards = [...target.cards]
-        
-        // For the current user, if they can see the swapped cards, use the actual card data
-        // Otherwise, swap the unknown cards
-        if (gameEvent.data.player_id === currentUserId || gameEvent.data.target_id === currentUserId) {
-          // Parse the actual card data sent from backend
-          const playerCardData = gameEvent.data.target_card ? parseCardString(gameEvent.data.target_card, gameEvent.data.target_card_id) : targetCards[gameEvent.data.target_index]
-          const targetCardData = gameEvent.data.player_card ? parseCardString(gameEvent.data.player_card, gameEvent.data.player_card_id) : playerCards[gameEvent.data.player_index]
-          
-          // Swap with actual card data, preserving IDs
-          playerCards[gameEvent.data.player_index] = {
-            ...playerCardData,
-            id: playerCards[gameEvent.data.player_index].id
-          }
-          targetCards[gameEvent.data.target_index] = {
-            ...targetCardData,
-            id: targetCards[gameEvent.data.target_index].id
-          }
-        } else {
-          // For other players, just swap the cards as-is
-          const tempCard = playerCards[gameEvent.data.player_index]
-          playerCards[gameEvent.data.player_index] = targetCards[gameEvent.data.target_index]
-          targetCards[gameEvent.data.target_index] = tempCard
-        }
-        
-        // Update both players' cards
-        updatePlayerCards(gameEvent.data.player_id, playerCards)
-        updatePlayerCards(gameEvent.data.target_id, targetCards)
-      }
+      swapCards(gameEvent.data.player_id, gameEvent.data.target_id, gameEvent.data.player_index, gameEvent.data.target_index)
       
       // Update visibility for all players affected by the King swap
       if (gameEvent.data.updated_visibility) {

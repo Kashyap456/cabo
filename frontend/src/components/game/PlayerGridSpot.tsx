@@ -163,25 +163,49 @@ const PlayerGridSpot = ({
           {cards.map((card, index) => {
             return (
               <AnimatePresence key={card.id}>
-                <div className="relative">
+                <motion.div 
+                  className={cn(
+                    "relative transition-all duration-200",
+                    card.isSelected && "scale-110 z-20",
+                    card.isSelectable && !card.isSelected && "hover:scale-105 cursor-pointer"
+                  )}
+                  whileHover={card.isSelectable ? { scale: 1.05 } : {}}
+                  whileTap={card.isSelectable ? { scale: 0.95 } : {}}
+                >
+                  {/* Selection ring */}
+                  {card.isSelected && (
+                    <motion.div
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="absolute inset-0 ring-4 ring-yellow-400 rounded-lg z-10 pointer-events-none"
+                    />
+                  )}
+                  
+                  {/* Selectable hint ring */}
+                  {card.isSelectable && !card.isSelected && (
+                    <div className="absolute inset-0 ring-2 ring-blue-400/50 rounded-lg pointer-events-none" />
+                  )}
+                  
                   <AnimatedCard
                     cardId={card.id} // Pass card ID for layoutId animations
                     value={card.value}
                     suit={card.suit}
                     isFaceDown={card.isFaceDown}
+                    isSelected={card.isSelected}
                     onClick={onCardClick ? () => onCardClick(index) : undefined}
                   />
-                  {/* Selection indicator */}
+                  
+                  {/* Selection badge */}
                   {card.isSelected && (
                     <motion.div
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      className="absolute -top-6 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-1.5 py-0.5 rounded text-xs font-bold"
+                      initial={{ scale: 0, opacity: 0, y: 10 }}
+                      animate={{ scale: 1, opacity: 1, y: 0 }}
+                      className="absolute -top-8 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-2 py-1 rounded-full text-xs font-bold shadow-lg"
                     >
-                      SEL
+                      SELECTED
                     </motion.div>
                   )}
-                </div>
+                </motion.div>
               </AnimatePresence>
             )
           })}
