@@ -115,10 +115,13 @@ const AnimatedCard = ({
   const cardFace = (
     <div
       className={cn(
-        'w-12 h-18 bg-white border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center shadow-lg',
-        getSuitColor(),
-        isJoker && suit === 'spades' && 'bg-black',
-        isJoker && suit === 'hearts' && 'bg-red-500',
+        'w-12 h-18 border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center shadow-lg',
+        // Set background based on whether it's a joker or regular card
+        isJoker && suit?.toLowerCase() === 'spades' ? 'bg-black text-white' :
+        isJoker && suit?.toLowerCase() === 'hearts' ? 'bg-red-500 text-white' :
+        'bg-white',
+        // Apply text color for regular cards
+        !isJoker && getSuitColor(),
         className,
       )}
     >

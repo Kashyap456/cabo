@@ -30,6 +30,13 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
   setCurrentSeq: (seq) => set({ currentSeq: seq }),
   isReady: false,
   setIsReady: (ready) => set({ isReady: ready }),
+  reset: () => set({
+    roomCode: '',
+    phase: RoomPhase.WAITING,
+    players: [],
+    currentSeq: 0,
+    isReady: false
+  })
 }))
 
 // Helper functions to compute derived state
@@ -59,4 +66,5 @@ interface RoomStore {
   setCurrentSeq: (seq: number) => void
   isReady: boolean
   setIsReady: (ready: boolean) => void
+  reset: () => void
 }

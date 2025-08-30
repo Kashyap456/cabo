@@ -369,7 +369,7 @@ class GameOrchestrator:
             f"replayed {len(missed_events)} events"
         )
 
-    async def schedule_game_cleanup(self, room_id: str, delay_seconds: int = 30):
+    async def schedule_game_cleanup(self, room_id: str, delay_seconds: int = 35):
         """Schedule game cleanup after delay"""
         logger.info(
             f"Scheduling game cleanup for room {room_id} in {delay_seconds} seconds")
@@ -400,7 +400,7 @@ class GameOrchestrator:
         await self.end_game(room_id)
 
     async def end_game(self, room_id: str):
-        """Clean up game resources"""
+        """Clean up game resources and database records"""
         logger.info(f"Cleaning up game for room {room_id}")
 
         # Cancel processing tasks
@@ -417,6 +417,78 @@ class GameOrchestrator:
         # Clean up stream and checkpoints
         await self.stream_manager.cleanup_stream(room_id)
         await self.checkpoint_manager.cleanup_checkpoints(room_id)
+        
+        # Additional comprehensive Redis cleanup
+        try:
+            from services.redis_manager import redis_manager
+            await redis_manager.ensure_connected()
+            redis = redis_manager.redis
+            
+            # Clean up game state
+            await redis.delete(f"game:{room_id}")
+            
+            # Clean up room data
+            await redis.delete(f"room:{room_id}")
+            
+            # Clean up stream data
+            await redis.delete(f"stream:game:{room_id}")
+            await redis.delete(f"stream:game:{room_id}:events")
+            
+            # Clean up player states
+            cursor = 0
+            while True:
+                cursor, keys = await redis.scan(cursor, match=f"player:{room_id}:*", count=100)
+                if keys:
+                    await redis.delete(*keys)
+                if cursor == 0:
+                    break
+            
+            # Clean up channel data
+            await redis.delete(f"channel:{room_id}")
+            
+            # Clean up checkpoint keys
+            cursor = 0
+            while True:
+                cursor, keys = await redis.scan(cursor, match=f"checkpoint:{room_id}:*", count=100)
+                if keys:
+                    await redis.delete(*keys)
+                if cursor == 0:
+                    break
+                    
+            logger.info(f"Completed Redis cleanup for room {room_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to clean up Redis data for room {room_id}: {e}")
+        
+        # Clean up database records (UserToRoom and GameRoom)
+        try:
+            from app.core.database import get_db
+            from app.models import GameRoom, UserToRoom, GameCheckpoint
+            from sqlalchemy import delete
+            
+            async for db in get_db():
+                # Delete in correct order due to foreign key constraints
+                # 1. Delete all user memberships
+                await db.execute(
+                    delete(UserToRoom).where(UserToRoom.room_id == room_id)
+                )
+                
+                # 2. Delete game checkpoints  
+                await db.execute(
+                    delete(GameCheckpoint).where(GameCheckpoint.room_id == room_id)
+                )
+                
+                # 3. Finally delete the room
+                await db.execute(
+                    delete(GameRoom).where(GameRoom.room_id == room_id)
+                )
+                
+                await db.commit()
+                logger.info(f"Deleted database records for room {room_id}")
+                break
+                
+        except Exception as e:
+            logger.error(f"Failed to clean up database records for room {room_id}: {e}")
 
         # Close all WebSocket connections for this room
         await self.connection_manager.close_room_connections(room_id)

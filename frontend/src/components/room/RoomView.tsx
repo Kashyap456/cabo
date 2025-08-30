@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useRoomStore, useIsHost, RoomPhase } from '../../stores/game_state'
 import { useAuthStore } from '../../stores/auth'
 import { useStartGame } from '../../api/rooms'
@@ -14,6 +15,7 @@ import ActionPanel from './ActionPanel'
 import GameStatus from '../game/GameStatus'
 import { calculatePlayerPositions } from '@/utils/tablePositions'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
+import { cn } from '@/lib/utils'
 
 export default function RoomView() {
   // Room state
@@ -21,10 +23,11 @@ export default function RoomView() {
   const isHost = useIsHost()
   const { sessionId } = useAuthStore()
   const startGameMutation = useStartGame()
+  const navigate = useNavigate()
 
   // Game state (only used when in game)
   const gamePlayState = useGamePlayStore()
-  const { sendMessage } = useGameWebSocket()
+  const { sendMessage, disconnect } = useGameWebSocket()
   const { isCardVisible } = useCardVisibility()
 
   // Table dimensions
@@ -51,10 +54,49 @@ export default function RoomView() {
   }, [])
 
   // Game logic helpers
-  const isInGame = roomPhase === RoomPhase.IN_GAME
+  const isInGame = roomPhase === RoomPhase.IN_GAME || roomPhase === RoomPhase.ENDED
+  const isEndGame = roomPhase === RoomPhase.ENDED || (isInGame && gamePlayState.phase === GamePhase.ENDED)
+  const endGameData = gamePlayState.endGameData
+
+  // Client-side countdown timer
+  const [clientCountdown, setClientCountdown] = useState<number | null>(null)
+  
+  useEffect(() => {
+    if (isEndGame && endGameData?.countdownSeconds) {
+      // Initialize client countdown
+      setClientCountdown(endGameData.countdownSeconds)
+      
+      const interval = setInterval(() => {
+        setClientCountdown(prev => {
+          if (prev === null || prev <= 0) {
+            clearInterval(interval)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+      
+      return () => clearInterval(interval)
+    }
+  }, [isEndGame, endGameData?.countdownSeconds])
+  
+  // Update client countdown when we get updates from server
+  useEffect(() => {
+    if (endGameData?.countdownSeconds !== undefined) {
+      setClientCountdown(endGameData.countdownSeconds)
+    }
+  }, [endGameData?.countdownSeconds])
 
   // Get the actual player list we'll be rendering
   const displayPlayers = isInGame ? gamePlayState.players : players
+  
+  // Calculate rankings from endgame scores
+  const playerRankings = endGameData?.finalScores
+    ? [...endGameData.finalScores].sort((a, b) => a.score - b.score).map((score, index) => ({
+        ...score,
+        rank: index + 1
+      }))
+    : []
 
   // Calculate player positions based on the actual players we're showing
   const currentPlayerIndex = displayPlayers.findIndex((p) => p.id === sessionId)
@@ -101,6 +143,19 @@ export default function RoomView() {
     ) {
       sendMessage({ type: 'play_drawn_card' })
     }
+  }
+
+  // Handle leaving the game
+  const handleLeaveGame = () => {
+    // Disconnect WebSocket first
+    disconnect()
+    // Navigate to homepage
+    navigate({ to: '/' })
+    // Clear game state after a short delay
+    setTimeout(() => {
+      gamePlayState.resetGameState()
+      useRoomStore.getState().reset()
+    }, 100)
   }
 
   // Handle hand card replacement
@@ -150,10 +205,10 @@ export default function RoomView() {
   }
 
   return (
-    <GameTable showPositionGuides={true} data-table-container>
+    <GameTable showPositionGuides={false} data-table-container>
       <LayoutGroup>
-        {/* Game status - show in top left during game */}
-        {isInGame && <GameStatus />}
+        {/* Game status - show in top left during game (but not endgame) */}
+        {isInGame && !isEndGame && <GameStatus />}
 
         {/* Room info display - always visible */}
         <div className="fixed top-4 right-4 z-20">
@@ -192,6 +247,7 @@ export default function RoomView() {
           {displayPlayers.map((player, index) => {
             const roomPlayer = players.find((p) => p.id === player.id)
             const cards = isInGame && 'cards' in player ? player.cards : []
+            const playerRanking = playerRankings.find(r => r.player_id === player.id)
 
             return (
               <PlayerGridSpot
@@ -201,17 +257,20 @@ export default function RoomView() {
                 isHost={roomPlayer?.isHost || false}
                 isCurrentPlayer={player.id === sessionId}
                 isTurn={isInGame && player.id === gamePlayState.currentPlayerId}
+                score={playerRanking?.score}
+                rank={playerRanking?.rank}
+                isEndGame={isEndGame}
                 position={positions[index]}
                 tableDimensions={tableDimensions}
                 cards={cards.map((card: any, cardIndex: number) => ({
                   id: card.id, // Pass through the card ID for animations
-                  value: isCardVisible(player.id, cardIndex, card)
+                  value: isEndGame || isCardVisible(player.id, cardIndex, card)
                     ? card.rank
                     : undefined,
-                  suit: isCardVisible(player.id, cardIndex, card)
+                  suit: isEndGame || isCardVisible(player.id, cardIndex, card)
                     ? card.suit
                     : undefined,
-                  isFaceDown: !isCardVisible(player.id, cardIndex, card),
+                  isFaceDown: !isEndGame && !isCardVisible(player.id, cardIndex, card),
                   isSelected:
                     isInGame &&
                     gamePlayState.selectedCards.some(
@@ -223,7 +282,7 @@ export default function RoomView() {
                     gamePlayState.viewingIndicator?.playerId === player.id &&
                     gamePlayState.viewingIndicator?.cardIndex === cardIndex,
                   isSelectable: (() => {
-                    if (!isInGame) return false
+                    if (!isInGame || isEndGame) return false
 
                     // During turn transitions or stack transitions, no cards are selectable
                     if (gamePhase === GamePhase.TURN_TRANSITION) return false
@@ -333,8 +392,8 @@ export default function RoomView() {
               </motion.div>
             )}
 
-            {/* In-game content */}
-            {roomPhase === RoomPhase.IN_GAME && (
+            {/* In-game content (only show deck during active play) */}
+            {roomPhase === RoomPhase.IN_GAME && !isEndGame && (
               <motion.div
                 key="playing"
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -376,11 +435,51 @@ export default function RoomView() {
                 />
               </motion.div>
             )}
+
+            {/* Endgame content - simple progress bar */}
+            {isEndGame && endGameData && clientCountdown !== null && (
+              <motion.div
+                key="endgame"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="flex flex-col items-center gap-4"
+              >
+                {/* Winner text */}
+                <div className="text-center">
+                  <h3 className="text-2xl font-bold text-yellow-300 text-shadow-lg mb-1">
+                    {endGameData.winnerName} Wins!
+                  </h3>
+                  <p className="text-sm text-yellow-100">
+                    Redirecting in {clientCountdown}s...
+                  </p>
+                </div>
+                
+                {/* Progress bar */}
+                <div className="w-64 h-3 bg-wood-darker/50 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600"
+                    initial={{ width: "100%" }}
+                    animate={{ width: `${(clientCountdown / 30) * 100}%` }}
+                    transition={{ duration: 1, ease: "linear" }}
+                  />
+                </div>
+                
+                {/* Leave button */}
+                <WoodButton
+                  variant="small"
+                  onClick={handleLeaveGame}
+                  className="px-4 py-1 text-xs"
+                >
+                  Leave Now
+                </WoodButton>
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
 
-        {/* Action Panel - bottom right corner, below player badges */}
-        {isInGame && currentPlayer && (
+        {/* Action Panel - bottom right corner, below player badges (hide during endgame) */}
+        {isInGame && !isEndGame && currentPlayer && (
           <div className="fixed bottom-4 right-4 z-10">
             <ActionPanel />
           </div>

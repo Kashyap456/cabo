@@ -1,5 +1,6 @@
 import useWebSocket, { ReadyState } from 'react-use-websocket'
 import { useCallback, useEffect } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 
 import { useRoomStore, type Player, RoomPhase } from '@/stores/game_state'
 import { useGamePlayStore, GamePhase, Suit, type Card as GameCard } from '@/stores/game_play_state'
@@ -922,6 +923,8 @@ export const useGameWebSocket = () => {
     setIsReady
   } = useRoomStore()
   
+  const navigate = useNavigate()
+  
   const socketUrl = import.meta.env.VITE_WS_URL || 'wss://cabo.kashyap.ch/ws'
 
   const {
@@ -1092,17 +1095,20 @@ export const useGameWebSocket = () => {
       case 'redirect_home': {
         // Redirect to home page using router
         console.log('Game cleanup complete, redirecting to home...')
-        // The EndGameView component handles navigation via the router
-        // We just clear the game state
-        useGamePlayStore.getState().resetGameState()
-        useRoomStore.getState().reset()
+        // Navigate to homepage first, then clear state
+        navigate({ to: '/' })
+        // Clear the game state after navigation starts
+        setTimeout(() => {
+          useGamePlayStore.getState().resetGameState()
+          useRoomStore.getState().reset()
+        }, 100)
         break
       }
       
       default:
         console.log('Unhandled message type:', message.type)
     }
-  }, [addPlayer, removePlayer, setPlayers, setPhase, setCurrentSeq, setIsReady, sendWebSocketMessage])
+  }, [addPlayer, removePlayer, setPlayers, setPhase, setCurrentSeq, setIsReady, sendWebSocketMessage, navigate])
 
   // Send ping to keep connection alive
   const sendPing = useCallback(() => {
@@ -1143,10 +1149,20 @@ export const useGameWebSocket = () => {
   const isConnecting = readyState === ReadyState.CONNECTING
   const isDisconnected = readyState === ReadyState.CLOSED
 
+  // Disconnect WebSocket cleanly
+  const disconnect = useCallback(() => {
+    const ws = getWebSocket()
+    if (ws) {
+      console.log('Manually disconnecting WebSocket')
+      ws.close(1000, 'User leaving game')
+    }
+  }, [getWebSocket])
+
   return {
     sendMessage: sendWebSocketMessage,
     sendPing,
     requestSessionInfo,
+    disconnect,
     isConnected,
     isConnecting,
     isDisconnected,

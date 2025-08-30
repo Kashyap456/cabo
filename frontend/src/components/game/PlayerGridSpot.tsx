@@ -8,6 +8,9 @@ interface PlayerGridSpotProps {
   isHost?: boolean
   isCurrentPlayer?: boolean
   isTurn?: boolean
+  score?: number
+  rank?: number
+  isEndGame?: boolean
   cards?: Array<{
     id?: string // Card ID for animations
     value?: number | string
@@ -40,6 +43,9 @@ const PlayerGridSpot = ({
   isHost = false,
   isCurrentPlayer = false,
   isTurn = false,
+  score,
+  rank,
+  isEndGame = false,
   cards = [],
   position,
   tableDimensions,
@@ -100,24 +106,55 @@ const PlayerGridSpot = ({
       >
         <div
           className={cn(
-            'px-3 py-1.5 rounded-lg shadow-lg',
-            isCurrentPlayer
+            'px-3 py-1.5 rounded-lg shadow-lg transition-all',
+            // Medal colors for top 3 in endgame
+            isEndGame && rank === 1
+              ? 'bg-gradient-to-br from-yellow-300 via-yellow-400 to-yellow-500 text-yellow-900 ring-2 ring-yellow-600'
+              : isEndGame && rank === 2
+              ? 'bg-gradient-to-br from-gray-300 via-gray-400 to-gray-500 text-gray-900 ring-2 ring-gray-600'
+              : isEndGame && rank === 3
+              ? 'bg-gradient-to-br from-orange-600 via-orange-700 to-orange-800 text-orange-100 ring-2 ring-orange-900'
+              : isCurrentPlayer
               ? 'bg-yellow-600 text-amber-900'
               : 'bg-amber-800 text-yellow-100',
-            isTurn && 'ring-4 ring-yellow-400 animate-pulse',
+            isTurn && !isEndGame && 'ring-4 ring-yellow-400 animate-pulse',
           )}
         >
-          <div className="flex items-center gap-1">
-            <span className="font-bold text-xs">{nickname}</span>
-            {isCurrentPlayer && (
-              <span className="text-xs bg-yellow-400 text-amber-900 px-1 rounded font-semibold">
-                YOU
-              </span>
-            )}
-            {isHost && (
-              <span className="text-xs bg-amber-900 text-yellow-300 px-1 rounded">
-                HOST
-              </span>
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1">
+              {/* Ranking badge during endgame */}
+              {isEndGame && rank && (
+                <span className={cn(
+                  "text-xs font-black px-1.5 py-0.5 rounded",
+                  rank === 1 && "bg-yellow-600 text-yellow-100",
+                  rank === 2 && "bg-gray-600 text-gray-100",
+                  rank === 3 && "bg-orange-900 text-orange-100",
+                  rank > 3 && "bg-gray-700 text-gray-200"
+                )}>
+                  {rank === 1 && '1st'}
+                  {rank === 2 && '2nd'}
+                  {rank === 3 && '3rd'}
+                  {rank > 3 && `${rank}th`}
+                </span>
+              )}
+              <span className="font-bold text-xs">{nickname}</span>
+              {isCurrentPlayer && (
+                <span className="text-xs bg-yellow-400 text-amber-900 px-1 rounded font-semibold">
+                  YOU
+                </span>
+              )}
+              {isHost && (
+                <span className="text-xs bg-amber-900 text-yellow-300 px-1 rounded">
+                  HOST
+                </span>
+              )}
+            </div>
+            {/* Score display during endgame */}
+            {isEndGame && score !== undefined && (
+              <div className="text-center">
+                <span className="text-lg font-black">{score}</span>
+                <span className="text-xs ml-1 opacity-75">pts</span>
+              </div>
             )}
           </div>
         </div>
