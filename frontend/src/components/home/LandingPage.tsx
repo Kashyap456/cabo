@@ -4,6 +4,7 @@ import JoinGameModal from './JoinGameModal'
 import { useAuthStore } from '@/stores/auth'
 import { useState } from 'react'
 import CaboLogo from '@/assets/cabo-logo.png'
+import CaboBackground from '@/assets/cabo_background.png'
 import WoodButton from '@/components/ui/WoodButton'
 
 const LandingPage = () => {
@@ -13,7 +14,10 @@ const LandingPage = () => {
   const [nicknameModalOpen, setNicknameModalOpen] = useState(false)
 
   return (
-    <div className="bg-[url('src/assets/cabo-background.png')] bg-cover bg-center h-screen">
+    <div
+      className="bg-cover bg-center h-screen"
+      style={{ backgroundImage: `url(${CaboBackground})` }}
+    >
       <NicknameModal
         open={!nickname || nicknameModalOpen}
         onOpenChange={setNicknameModalOpen}
