@@ -4,7 +4,7 @@ import JoinGameModal from './JoinGameModal'
 import { useAuthStore } from '@/stores/auth'
 import { useState } from 'react'
 import CaboLogo from '@/assets/cabo-logo.png'
-import CaboBackground from '@/assets/cabo_background.png'
+import CaboBackground from '@/assets/cabo-background.png'
 import WoodButton from '@/components/ui/WoodButton'
 
 const LandingPage = () => {
