@@ -245,7 +245,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
   switch (gameEvent.event_type) {
     case 'game_started': {
-      console.log('Game started with setup phase')
       setPhase(GamePhase.SETUP)
       // Also update room phase to show playing view
       useRoomStore.getState().setPhase(RoomPhase.IN_GAME)
@@ -253,12 +252,10 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'game_phase_changed': {
-      console.log('Game phase changed to:', gameEvent.data.phase, 'with data:', gameEvent.data)
       const newPhase = gameEvent.data.phase
       
       // Validate phase is a valid GamePhase value
       if (!Object.values(GamePhase).includes(newPhase)) {
-        console.error('Invalid game phase received:', newPhase)
         return
       }
       
@@ -311,7 +308,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'turn_changed': {
-      console.log('Turn changed to player:', gameEvent.data.current_player_name)
       const currentUserId = useAuthStore.getState().sessionId
       const { setCardVisibility } = useGamePlayStore.getState()
       setCurrentPlayer(gameEvent.data.current_player)
@@ -346,13 +342,11 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'card_drawn': {
-      console.log('Card drawn by player:', gameEvent.data.player_id, 'card_id:', gameEvent.data.card_id)
       const currentUserId = useAuthStore.getState().sessionId
 
       const cardData = gameEvent.data.card
       const cardId = gameEvent.data.card_id
       if (!cardId) {
-        console.error('No card ID found for drawn card')
         return
       }
 
@@ -372,7 +366,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         const cardData = gameEvent.data.card
         const cardId = gameEvent.data.card_id
         if (!cardId) {
-          console.error('No card ID found for played card')
           return
         }
         
@@ -391,7 +384,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'stack_called': {
-      console.log('Stack called by:', gameEvent.data.caller)
       const currentPhase = useGamePlayStore.getState().phase
       
       // Set the stack winner
@@ -412,8 +404,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'stack_success': {
-      console.log('Stack successful:', gameEvent.data.type, 'by', gameEvent.data.player)
-      
       // Handle card updates based on stack type
       if (gameEvent.data.type === 'self_stack') {
         // Player discarded their own card
@@ -457,10 +447,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'stack_failed': {
-      console.log('Stack failed by:', gameEvent.data.player, 'attempted card:', gameEvent.data.attempted_card,
-        'target player:', gameEvent.data.target_player_id, 'card index:', gameEvent.data.target_player_index,
-        'penalty:', gameEvent.data.penalty_card, 'penalty_card_id:', gameEvent.data.penalty_card_id)
-      
       // Remove penalty card from deck (for animation)
       if (gameEvent.data.penalty_card_id) {
         const currentDeck = useGamePlayStore.getState().deckCards.filter(id => id !== gameEvent.data.penalty_card_id)
@@ -532,9 +518,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'stack_timeout': {
-      console.log('Stack timed out for:', gameEvent.data.player, 'penalty:', gameEvent.data.penalty_card,
-        'penalty_card_id:', gameEvent.data.penalty_card_id)
-      
       // Remove penalty card from deck (for animation)
       if (gameEvent.data.penalty_card_id) {
         const currentDeck = useGamePlayStore.getState().deckCards.filter(id => id !== gameEvent.data.penalty_card_id)
@@ -564,14 +547,11 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'cabo_called': {
-      console.log('Cabo called by:', gameEvent.data.player)
       setCalledCabo(gameEvent.data.player_id)
       break
     }
 
     case 'card_viewed': {
-      console.log('Card viewed by:', gameEvent.data.player)
-      
       // Set viewing indicator for ALL players to see which card is being viewed
       if (gameEvent.data.player_id && gameEvent.data.card_index !== undefined) {
         setViewingIndicator({
@@ -609,8 +589,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'opponent_card_viewed': {
-      console.log('Opponent card viewed by:', gameEvent.data.viewer, 'target:', gameEvent.data.target)
-      
       // Set viewing indicator for ALL players to see which card is being viewed
       if (gameEvent.data.target_id && gameEvent.data.card_index !== undefined) {
         setViewingIndicator({
@@ -656,8 +634,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'king_card_viewed': {
-      console.log('King card viewed by:', gameEvent.data.viewer, 'target:', gameEvent.data.target, 'card:', gameEvent.data.card)
-      
       // Set viewing indicator for ALL players to see which card is being viewed
       if (gameEvent.data.target_id && gameEvent.data.card_index !== undefined) {
         setViewingIndicator({
@@ -693,8 +669,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'king_cards_swapped': {
-      console.log('King cards swapped between:', gameEvent.data.player, 'and:', gameEvent.data.target)
-      
       swapCards(gameEvent.data.player_id, gameEvent.data.target_id, gameEvent.data.player_index, gameEvent.data.target_index)
       
       // Update visibility for all players affected by the King swap
@@ -758,26 +732,21 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     case 'king_swap_skipped': {
-      console.log('King swap skipped by:', gameEvent.data.player)
       setSpecialAction(null)
       break
     }
 
     case 'swap_skipped': {
-      console.log('Swap skipped by:', gameEvent.data.player)
       setSpecialAction(null)
       break
     }
 
     case 'special_action_timeout': {
-      console.log('Special action timed out')
       setSpecialAction(null)
       break
     }
 
     case 'game_ended': {
-      console.log('Game ended, winner:', gameEvent.data.winner_name)
-      
       // Import the store functions we need
       const { setEndGameData, setPhase } = useGamePlayStore.getState()
       
@@ -798,7 +767,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
     
     case 'checkpoint_created': {
-      console.log('Received checkpoint event')
       // The checkpoint data is the entire event data
       const checkpoint = gameEvent.data
       
@@ -907,7 +875,6 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     }
 
     default: {
-      console.warn('Unknown game event type:', gameEvent.event_type)
       break
     }
   }
@@ -936,25 +903,20 @@ export const useGameWebSocket = () => {
     share: true,  // Share the WebSocket connection across all hook instances
     shouldReconnect: (closeEvent) => {
       // Reconnect unless it was a manual close or auth failure
-      console.log('WebSocket closed:', closeEvent.code, closeEvent.reason)
       return closeEvent.code !== 1000 && closeEvent.code !== 4001
     },
     reconnectAttempts: 5,
     reconnectInterval: 3000,
-    onOpen: () => console.log('WebSocket connected'),
-    onClose: (event) => console.log('WebSocket disconnected:', event.code, event.reason),
-    onError: (event) => console.error('WebSocket error:', event),
+    onOpen: () => {},
+    onClose: (event) => {},
+    onError: (event) => {},
   })
 
   // Handle incoming messages
   useEffect(() => {
     if (lastMessage !== null) {
-      try {
-        const message: WebSocketMessage = JSON.parse(lastMessage.data)
-        handleMessage(message)
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error)
-      }
+      const message: WebSocketMessage = JSON.parse(lastMessage.data)
+      handleMessage(message)
     }
   }, [lastMessage])
 
@@ -963,34 +925,18 @@ export const useGameWebSocket = () => {
   // Send a message to the WebSocket
   const sendWebSocketMessage = useCallback((message: WebSocketMessage) => {
     if (readyState === ReadyState.OPEN) {
-      try {
-        const messageStr = JSON.stringify(message)
-        sendMessage(messageStr)
-        // Only log non-ping/pong messages
-        if (message.type !== 'ping' && message.type !== 'pong') {
-          console.log('Sent WebSocket message:', message.type)
-        }
-      } catch (error) {
-        console.error('Failed to send WebSocket message:', error, message)
-      }
-    } else {
-      console.warn('WebSocket not connected, cannot send message:', message.type)
+      const messageStr = JSON.stringify(message)
+      sendMessage(messageStr)
     }
   }, [sendMessage, readyState])
 
   const handleMessage = useCallback((message: WebSocketMessage) => {
-    // Only log non-ping/pong messages
-    if (message.type !== 'ping' && message.type !== 'pong') {
-      console.log('Received WebSocket message:', message.type)
-    }
-    
     // Handle sequence number deduplication
     if (message.seq_num !== undefined) {
       const currentSeq = useRoomStore.getState().currentSeq
       
       // Skip duplicate messages (same or older sequence number)
       if (message.seq_num <= currentSeq) {
-        console.log(`Skipping duplicate message with seq_num ${message.seq_num} (current: ${currentSeq})`)
         return
       }
       
@@ -1000,7 +946,6 @@ export const useGameWebSocket = () => {
     switch (message.type) {
       case 'room_update': {
         const roomUpdate = message as RoomUpdateMessage
-        console.log('Received room update')
         
         // Apply room state
         const players = roomUpdate.room.players.map(p => ({
@@ -1018,26 +963,21 @@ export const useGameWebSocket = () => {
       
       case 'game_event': {
         const gameEvent = message as GameEventMessage
-        console.log('Received game event:', gameEvent.event_type, gameEvent.data)
-        console.log('Full game event message:', JSON.stringify(gameEvent, null, 2))
         
         // Check if the event has the expected structure
         if (!gameEvent.event_type) {
-          console.error('Game event missing event_type:', gameEvent)
           break
         }
         
         try {
           handleGameEvent(gameEvent)
         } catch (error) {
-          console.error('Error handling game event:', error, gameEvent)
         }
         break
       }
       
       case 'player_joined': {
         const joinedMessage = message as PlayerJoinedMessage
-        console.log(`Player ${joinedMessage.player.nickname} joined the room`)
         const newPlayer: Player = {
           id: joinedMessage.player.id,
           nickname: joinedMessage.player.nickname,
@@ -1049,14 +989,12 @@ export const useGameWebSocket = () => {
       
       case 'player_left': {
         const leftMessage = message as PlayerLeftMessage
-        console.log(`Player ${leftMessage.session_id} left the room`)
         removePlayer(leftMessage.session_id)
         break
       }
       
       case 'ready': {
         const readyMessage = message as ReadyMessage
-        console.log(`Room synchronized, ready at seq ${readyMessage.current_seq}`)
         setCurrentSeq(readyMessage.current_seq)
         setIsReady(true)
         break
@@ -1064,17 +1002,14 @@ export const useGameWebSocket = () => {
       
       case 'session_info': {
         const sessionMessage = message as SessionInfoMessage
-        console.log('Received session info:', sessionMessage.session_id, sessionMessage.nickname)
         // Update auth store with session info
         useAuthStore.getState().setSessionInfo(sessionMessage.nickname, sessionMessage.session_id)
-        console.log('Updated auth store with session info')
         break
       }
       
 
       
       case 'error': {
-        console.error('WebSocket error:', message.message)
         break
       }
       
@@ -1094,7 +1029,6 @@ export const useGameWebSocket = () => {
       
       case 'redirect_home': {
         // Redirect to home page using router
-        console.log('Game cleanup complete, redirecting to home...')
         // Navigate to homepage first, then clear state
         navigate({ to: '/' })
         // Clear the game state after navigation starts
@@ -1106,7 +1040,7 @@ export const useGameWebSocket = () => {
       }
       
       default:
-        console.log('Unhandled message type:', message.type)
+        break
     }
   }, [addPlayer, removePlayer, setPlayers, setPhase, setCurrentSeq, setIsReady, sendWebSocketMessage, navigate])
 
@@ -1117,7 +1051,6 @@ export const useGameWebSocket = () => {
 
   // Get session info
   const requestSessionInfo = useCallback(() => {
-    console.log('Requesting session info...')
     sendWebSocketMessage({ type: 'get_session_info' })
   }, [sendWebSocketMessage])
 
@@ -1126,7 +1059,6 @@ export const useGameWebSocket = () => {
     let hasRequestedSession = false
     
     if (readyState === ReadyState.OPEN && !hasRequestedSession) {
-      console.log('WebSocket connected, requesting session info...')
       hasRequestedSession = true
       requestSessionInfo()
     }
@@ -1153,7 +1085,6 @@ export const useGameWebSocket = () => {
   const disconnect = useCallback(() => {
     const ws = getWebSocket()
     if (ws) {
-      console.log('Manually disconnecting WebSocket')
       ws.close(1000, 'User leaving game')
     }
   }, [getWebSocket])

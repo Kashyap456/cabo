@@ -79,16 +79,6 @@ const PlayerGridSpot = ({
 
   return (
     <>
-      {/* Debug: Badge position dot */}
-      <div
-        className="absolute w-3 h-3 bg-blue-500 rounded-full z-50"
-        style={{
-          left: `${badgeXPercent}%`,
-          top: `${badgeYPercent}%`,
-          translate: '-50% -50%',
-        }}
-      />
-
       {/* Player name badge - positioned outside table, always readable */}
       <motion.div
         className={cn('absolute flex items-center justify-center', className)}
@@ -159,16 +149,6 @@ const PlayerGridSpot = ({
           </div>
         </div>
       </motion.div>
-
-      {/* Debug: Card position dot */}
-      <div
-        className="absolute w-3 h-3 bg-green-500 rounded-full z-50"
-        style={{
-          left: `${cardXPercent}%`,
-          top: `${cardYPercent}%`,
-          translate: '-50% -50%',
-        }}
-      />
 
       {/* Cards container - grid layout */}
       <motion.div
