@@ -29,6 +29,7 @@ export interface Card {
   rank: Rank | '?'  // '?' for unknown cards
   suit: Suit | '?' | null  // '?' for unknown cards, null for jokers
   isTemporarilyViewed?: boolean
+  isBeingViewed?: boolean  // True when someone is currently viewing this card
 }
 
 export interface PlayerGameState {
@@ -119,6 +120,9 @@ export interface GamePlayState {
   // Stack caller - only one can win the race
   stackCaller: StackCaller | null
   
+  // Currently being viewed card (for visual indication)
+  viewingIndicator: { playerId: string; cardIndex: number } | null
+  
   // Cabo state
   caboCalledBy: string | null
   finalRoundStarted: boolean
@@ -143,6 +147,7 @@ export interface GamePlayState {
   clearSelectedCards: () => void
   setStackCaller: (stackCaller: StackCaller | null) => void
   clearStackCaller: () => void
+  setViewingIndicator: (indicator: { playerId: string; cardIndex: number } | null) => void
   setCalledCabo: (playerId: string) => void
   resetGameState: () => void
   setDiscardPile: (cards: Card[]) => void
@@ -175,6 +180,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   specialAction: null,
   selectedCards: [],
   stackCaller: null,
+  viewingIndicator: null,
   caboCalledBy: null,
   finalRoundStarted: false,
   endGameData: null,
@@ -252,6 +258,8 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   setStackCaller: (stackCaller) => set({ stackCaller }),
   
   clearStackCaller: () => set({ stackCaller: null }),
+  
+  setViewingIndicator: (indicator) => set({ viewingIndicator: indicator }),
   
   setCalledCabo: (playerId) => set((state) => ({
     players: state.players.map(p =>

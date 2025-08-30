@@ -13,6 +13,7 @@ interface AnimatedCardProps {
   animationDelay?: number
   isSelected?: boolean
   isSelectable?: boolean
+  isBeingViewed?: boolean // True when someone is viewing this card
 }
 
 const AnimatedCard = ({
@@ -26,6 +27,7 @@ const AnimatedCard = ({
   animationDelay = 0,
   isSelected = false,
   isSelectable = false,
+  isBeingViewed = false,
 }: AnimatedCardProps) => {
   const [isAnimatingFlip, setIsAnimatingFlip] = useState(false)
   const [showFace, setShowFace] = useState(!isFaceDown)
@@ -140,7 +142,13 @@ const AnimatedCard = ({
       animate={{ scale: isSelected ? 1.05 : 1, opacity: 1 }}
       // Only apply exit animation if there's no layoutId (no FLIP animation)
       exit={cardId ? undefined : { opacity: 0 }}
-      className={cn('w-12 h-18', className, isSelectable ? 'cursor-pointer' : 'cursor-default')}
+      className={cn(
+        'w-12 h-18 rounded-lg', 
+        className, 
+        isSelectable ? 'cursor-pointer' : 'cursor-default',
+        // Add glowing purple ring and pulse animation when being viewed
+        isBeingViewed && 'ring-4 ring-purple-500 ring-opacity-75 animate-pulse shadow-lg shadow-purple-500/50'
+      )}
       whileHover={isSelectable ? { scale: 1.05 } : {}}
       whileTap={isSelectable ? { scale: 0.95 } : {}}
       onClick={isSelectable ? onClick : undefined}

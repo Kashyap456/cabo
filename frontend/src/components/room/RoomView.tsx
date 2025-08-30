@@ -218,6 +218,10 @@ export default function RoomView() {
                       (s) =>
                         s.playerId === player.id && s.cardIndex === cardIndex,
                     ),
+                  isBeingViewed:
+                    isInGame &&
+                    gamePlayState.viewingIndicator?.playerId === player.id &&
+                    gamePlayState.viewingIndicator?.cardIndex === cardIndex,
                   isSelectable: (() => {
                     if (!isInGame) return false
 

@@ -15,6 +15,7 @@ interface PlayerGridSpotProps {
     isFaceDown: boolean
     isSelected?: boolean
     isSelectable?: boolean
+    isBeingViewed?: boolean
   }>
   position: {
     x: number
@@ -196,6 +197,7 @@ const PlayerGridSpot = ({
                     isFaceDown={card.isFaceDown}
                     isSelected={card.isSelected}
                     isSelectable={card.isSelectable}
+                    isBeingViewed={card.isBeingViewed}
                     onClick={onCardClick ? () => onCardClick(index) : undefined}
                   />
 

@@ -182,6 +182,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     setSpecialAction,
     setStackCaller,
     clearStackCaller,
+    setViewingIndicator,
     setCalledCabo,
     getPlayerById,
     updatePlayerCards,
@@ -319,6 +320,9 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       
       // Clear special action when turn changes
       setSpecialAction(null)
+      
+      // Clear viewing indicator when turn changes
+      setViewingIndicator(null)
       
       // Turn changes always clear ALL visibility (per game rules)
       // Reset visibility map and clear all isTemporarilyViewed flags
@@ -566,6 +570,15 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'card_viewed': {
       console.log('Card viewed by:', gameEvent.data.player)
+      
+      // Set viewing indicator for ALL players to see which card is being viewed
+      if (gameEvent.data.player_id && gameEvent.data.card_index !== undefined) {
+        setViewingIndicator({
+          playerId: gameEvent.data.player_id,
+          cardIndex: gameEvent.data.card_index
+        })
+      }
+      
       // Only show the viewed card to the viewer
       const currentUserId = useAuthStore.getState().sessionId
       if (gameEvent.data.player_id === currentUserId && 
@@ -596,6 +609,15 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'opponent_card_viewed': {
       console.log('Opponent card viewed by:', gameEvent.data.viewer, 'target:', gameEvent.data.target)
+      
+      // Set viewing indicator for ALL players to see which card is being viewed
+      if (gameEvent.data.target_id && gameEvent.data.card_index !== undefined) {
+        setViewingIndicator({
+          playerId: gameEvent.data.target_id,
+          cardIndex: gameEvent.data.card_index
+        })
+      }
+      
       // Show the viewed card to the viewer only
       const currentUserId = useAuthStore.getState().sessionId
       if (gameEvent.data.viewer_id === currentUserId && 
@@ -634,6 +656,14 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
 
     case 'king_card_viewed': {
       console.log('King card viewed by:', gameEvent.data.viewer, 'target:', gameEvent.data.target, 'card:', gameEvent.data.card)
+      
+      // Set viewing indicator for ALL players to see which card is being viewed
+      if (gameEvent.data.target_id && gameEvent.data.card_index !== undefined) {
+        setViewingIndicator({
+          playerId: gameEvent.data.target_id,
+          cardIndex: gameEvent.data.card_index
+        })
+      }
       
       // Show the viewed card to the viewer only
       const currentUserId = useAuthStore.getState().sessionId
