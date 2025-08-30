@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import AnimatedCard from './AnimatedCard'
+import { GamePhase } from '../../stores/game_play_state'
 
 interface DrawnCardSlotProps {
   drawnCard?: {
@@ -10,13 +11,16 @@ interface DrawnCardSlotProps {
   }
   isCurrentPlayer: boolean
   onCardClick?: () => void
+  gamePhase?: GamePhase
 }
 
 const DrawnCardSlot = ({
   drawnCard,
   isCurrentPlayer,
   onCardClick,
+  gamePhase,
 }: DrawnCardSlotProps) => {
+  const isSelectable = drawnCard && isCurrentPlayer && gamePhase === GamePhase.CARD_DRAWN
   return (
     <div className="relative w-12 h-18">
       {/* Label for drawn card area */}
@@ -43,6 +47,7 @@ const DrawnCardSlot = ({
               isFlipped={false} // Never use the flip that mirrors
               className="w-12 h-18 absolute inset-0"
               onClick={onCardClick}
+              isSelectable={isSelectable}
             />
           ) : (
             // Empty slot placeholder
@@ -54,7 +59,7 @@ const DrawnCardSlot = ({
       </div>
 
       {/* Hint text for current player */}
-      {drawnCard && isCurrentPlayer && (
+      {isSelectable && (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

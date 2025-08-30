@@ -163,6 +163,7 @@ class GamePhase(Enum):
     KING_VIEW_PHASE = "king_view_phase"
     KING_SWAP_PHASE = "king_swap_phase"
     STACK_CALLED = "stack_called"
+    STACK_TURN_TRANSITION = "stack_turn_transition"  # Show stack card after failure, prevent stacking
     TURN_TRANSITION = "turn_transition"
     ENDED = "ended"
 
@@ -187,6 +188,7 @@ class MessageType(Enum):
     # System events
     STACK_TIMEOUT = "stack_timeout"
     SPECIAL_ACTION_TIMEOUT = "special_action_timeout"
+    STACK_TURN_TRANSITION_TIMEOUT = "stack_turn_transition_timeout"
     TURN_TRANSITION_TIMEOUT = "turn_transition_timeout"
     SETUP_TIMEOUT = "setup_timeout"
     NEXT_TURN = "next_turn"
@@ -302,6 +304,10 @@ class SpecialActionTimeoutMessage(SystemMessage):
 
 
 @dataclass
+class StackTurnTransitionTimeoutMessage(SystemMessage):
+    type: MessageType = MessageType.STACK_TURN_TRANSITION_TIMEOUT
+
+@dataclass
 class TurnTransitionTimeoutMessage(SystemMessage):
     type: MessageType = MessageType.TURN_TRANSITION_TIMEOUT
 
@@ -344,6 +350,7 @@ class GameState:
     king_viewed_card: Optional[Card] = None
     king_viewed_player: Optional[str] = None
     king_viewed_index: Optional[int] = None
+    stack_turn_transition_timer_id: Optional[str] = None
     turn_transition_timer_id: Optional[str] = None
     setup_timer_id: Optional[str] = None
     cabo_caller: Optional[str] = None
@@ -430,6 +437,9 @@ class CaboGame:
             elif timeout_id == self.state.special_action_timer_id:
                 self.message_queue.put(SpecialActionTimeoutMessage())
                 self.state.special_action_timer_id = None
+            elif timeout_id == self.state.stack_turn_transition_timer_id:
+                self.message_queue.put(StackTurnTransitionTimeoutMessage())
+                self.state.stack_turn_transition_timer_id = None
             elif timeout_id == self.state.turn_transition_timer_id:
                 self.message_queue.put(TurnTransitionTimeoutMessage())
                 self.state.turn_transition_timer_id = None
@@ -489,6 +499,7 @@ class CaboGame:
             MessageType.KING_SKIP_SWAP: self._handle_king_skip_swap,
             MessageType.STACK_TIMEOUT: self._handle_stack_timeout,
             MessageType.SPECIAL_ACTION_TIMEOUT: self._handle_special_action_timeout,
+            MessageType.STACK_TURN_TRANSITION_TIMEOUT: self._handle_stack_turn_transition_timeout,
             MessageType.TURN_TRANSITION_TIMEOUT: self._handle_turn_transition_timeout,
             MessageType.SETUP_TIMEOUT: self._handle_setup_timeout,
             MessageType.NEXT_TURN: self._handle_next_turn,
@@ -690,6 +701,9 @@ class CaboGame:
         if self.state.played_card is None:
             return {"success": False, "error": "No card to stack on"}
 
+        if self.state.phase == GamePhase.STACK_TURN_TRANSITION:
+            return {"success": False, "error": "Cannot call stack during stack transition"}
+
         if self.state.phase == GamePhase.STACK_CALLED or self.state.stack_caller is not None:
             return {"success": False, "error": "Another player already called STACK"}
 
@@ -764,6 +778,11 @@ class CaboGame:
                 player.hand.pop(message.card_index)
                 self.discard_pile.append(stack_card)
 
+                # Enter stack_turn_transition phase to show the successful stack
+                self.state.phase = GamePhase.STACK_TURN_TRANSITION
+                self.state.stack_turn_transition_timer_id = self._schedule_timeout(
+                    StackTurnTransitionTimeoutMessage(), 5.0)
+                
                 return {
                     "success": True,
                     "event": GameEvent("stack_success", {
@@ -771,9 +790,11 @@ class CaboGame:
                         "player": player.name,
                         "player_id": player.player_id,
                         "card_index": message.card_index,
-                        "discarded_card": str(stack_card)
+                        "discarded_card": str(stack_card),
+                        "discarded_card_id": stack_card.identity,
+                        "phase": "stack_turn_transition"
                     }),
-                    "next_messages": next_messages
+                    "next_messages": []  # Don't send NextTurnMessage immediately
                 }
             else:
                 # Opponent stack - give card to opponent
@@ -784,6 +805,11 @@ class CaboGame:
                 player.hand.pop(message.card_index)
                 target_player.add_card(stack_card)
 
+                # Enter stack_turn_transition phase to show the successful stack
+                self.state.phase = GamePhase.STACK_TURN_TRANSITION
+                self.state.stack_turn_transition_timer_id = self._schedule_timeout(
+                    StackTurnTransitionTimeoutMessage(), 5.0)
+                
                 return {
                     "success": True,
                     "event": GameEvent("stack_success", {
@@ -794,9 +820,10 @@ class CaboGame:
                         "target": target_player.name,
                         "target_id": target_player.player_id,
                         "given_card": str(stack_card),
-                        "given_card_id": stack_card.identity
+                        "given_card_id": stack_card.identity,
+                        "phase": "stack_turn_transition"
                     }),
-                    "next_messages": next_messages
+                    "next_messages": []  # Don't send NextTurnMessage immediately
                 }
         else:
             # Failed stack - player draws a card
@@ -804,18 +831,25 @@ class CaboGame:
             if drawn_card:
                 player.add_card(drawn_card)
 
+            # Enter stack_turn_transition phase to show the failed stack
+            self.state.phase = GamePhase.STACK_TURN_TRANSITION
+            self.state.stack_turn_transition_timer_id = self._schedule_timeout(
+                StackTurnTransitionTimeoutMessage(), 5.0)
+            
             return {
                 "success": True,
                 "event": GameEvent("stack_failed", {
                     "player": player.name,
                     "player_id": player.player_id,
                     "attempted_card": str(stack_card),
+                    "attempted_card_id": stack_card.identity,
                     "target_player_id": message.target_player_id,
                     "target_player_index": message.card_index,
                     "penalty_card": str(drawn_card) if drawn_card else None,
-                    "penalty_card_id": drawn_card.identity if drawn_card else None
+                    "penalty_card_id": drawn_card.identity if drawn_card else None,
+                    "phase": "stack_turn_transition"
                 }),
-                "next_messages": next_messages
+                "next_messages": []  # Don't send NextTurnMessage immediately
             }
 
     def _handle_stack_timeout(self, message: StackTimeoutMessage) -> Dict[str, Any]:
@@ -1415,6 +1449,23 @@ class CaboGame:
                 "current_player": self.get_current_player().player_id,
                 "current_player_name": self.get_current_player().name
             })
+        }
+
+    def _handle_stack_turn_transition_timeout(self, message: StackTurnTransitionTimeoutMessage) -> Dict[str, Any]:
+        """Handle stack turn transition timeout"""
+        print(f"DEBUG: _handle_stack_turn_transition_timeout called, adding NextTurnMessage")
+        # Clear stack turn transition state
+        if self.state.stack_turn_transition_timer_id:
+            self.pending_timeouts.pop(
+                self.state.stack_turn_transition_timer_id, None)
+            self.state.stack_turn_transition_timer_id = None
+
+        # Clear all temporary card visibility
+        self.state.card_visibility.clear()
+
+        return {
+            "success": True,
+            "next_messages": [NextTurnMessage()]
         }
 
     def _handle_turn_transition_timeout(self, message: TurnTransitionTimeoutMessage) -> Dict[str, Any]:

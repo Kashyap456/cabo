@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import AnimatedCard from './AnimatedCard'
 import DrawnCardSlot from './DrawnCardSlot'
+import { GamePhase } from '../../stores/game_play_state'
 
 interface DeckProps {
   deckCount?: number
@@ -20,6 +21,7 @@ interface DeckProps {
   onDrawFromDiscard?: () => void
   onDrawnCardClick?: () => void
   isCurrentPlayerTurn?: boolean
+  gamePhase?: GamePhase
 }
 
 const Deck = ({
@@ -31,8 +33,10 @@ const Deck = ({
   onDrawFromDiscard,
   onDrawnCardClick,
   isCurrentPlayerTurn = false,
+  gamePhase,
 }: DeckProps) => {
   const topDiscardCard = discardPile[discardPile.length - 1]
+  const isDeckSelectable = isCurrentPlayerTurn && gamePhase === GamePhase.DRAW_PHASE && !drawnCard
 
   return (
     <div className="flex gap-8 items-start justify-center">
@@ -42,15 +46,16 @@ const Deck = ({
         drawnCard={drawnCard}
         isCurrentPlayer={isCurrentPlayerTurn}
         onCardClick={onDrawnCardClick}
+        gamePhase={gamePhase}
       />
 
       <motion.div
         className="relative"
-        whileHover={isCurrentPlayerTurn ? { scale: 1.05 } : {}}
-        whileTap={isCurrentPlayerTurn ? { scale: 0.95 } : {}}
+        whileHover={isDeckSelectable ? { scale: 1.05 } : {}}
+        whileTap={isDeckSelectable ? { scale: 0.95 } : {}}
       >
         <div
-          className={`relative cursor-pointer ${!isCurrentPlayerTurn && 'pointer-events-none opacity-70'}`}
+          className={`relative ${isDeckSelectable ? 'cursor-pointer' : 'pointer-events-none opacity-70'}`}
           onClick={onDrawFromDeck}
         >
           {/* All deck cards stacked - needed for FLIP animations */}

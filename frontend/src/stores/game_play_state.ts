@@ -47,6 +47,7 @@ export enum GamePhase {
   KING_VIEW_PHASE = 'king_view_phase',
   KING_SWAP_PHASE = 'king_swap_phase',
   STACK_CALLED = 'stack_called',
+  STACK_TURN_TRANSITION = 'stack_turn_transition',  // Show stack card after failure, prevent stacking
   TURN_TRANSITION = 'turn_transition',
   ENDED = 'ended'
 }
@@ -307,12 +308,13 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   canCallStack: () => {
     const state = get()
     // Can call stack after a card is played (turn transition or special action phases)
-    // Cannot call stack during draw/play phases or if already in stack phase
+    // Cannot call stack during draw/play phases, stack phase, or stack_turn_transition
     return (state.phase === GamePhase.TURN_TRANSITION || 
             state.phase === GamePhase.WAITING_FOR_SPECIAL_ACTION ||
             state.phase === GamePhase.KING_VIEW_PHASE ||
             state.phase === GamePhase.KING_SWAP_PHASE) &&
-           state.phase !== GamePhase.STACK_CALLED
+           state.phase !== GamePhase.STACK_CALLED &&
+           state.phase !== GamePhase.STACK_TURN_TRANSITION
   },
   
   hasStackCaller: () => {

@@ -149,8 +149,6 @@ export default function RoomView() {
     }
   }
 
-  console.log(displayPlayers.map((p) => p.cards))
-
   return (
     <GameTable showPositionGuides={true} data-table-container>
       <LayoutGroup>
@@ -220,19 +218,65 @@ export default function RoomView() {
                       (s) =>
                         s.playerId === player.id && s.cardIndex === cardIndex,
                     ),
-                  isSelectable:
-                    isInGame &&
-                    // Selectable for special actions
-                    (gamePlayState.isCardSelectable(
-                      player.id,
-                      cardIndex,
-                      sessionId,
-                    ) ||
-                      // Selectable for card replacement when it's our turn and we have a drawn card
-                      (player.id === sessionId &&
+                  isSelectable: (() => {
+                    if (!isInGame) return false
+
+                    // During turn transitions or stack transitions, no cards are selectable
+                    if (gamePhase === GamePhase.TURN_TRANSITION) return false
+
+                    // During CARD_DRAWN phase, only current player's own cards are selectable
+                    if (gamePhase === GamePhase.CARD_DRAWN) {
+                      return (
+                        player.id === sessionId &&
                         gamePlayState.drawnCard &&
-                        isMyTurn &&
-                        gamePhase === GamePhase.CARD_DRAWN)),
+                        isMyTurn
+                      )
+                    }
+
+                    // For special actions (VIEW_OWN, VIEW_OPPONENT, etc.)
+                    if (
+                      gamePlayState.specialAction &&
+                      (gamePhase === GamePhase.WAITING_FOR_SPECIAL_ACTION ||
+                        gamePhase === GamePhase.KING_VIEW_PHASE ||
+                        gamePhase === GamePhase.KING_SWAP_PHASE)
+                    ) {
+                      // Only the player with the special action can select
+                      if (gamePlayState.specialAction.playerId !== sessionId) {
+                        return false
+                      }
+
+                      const actionType = gamePlayState.specialAction.type
+
+                      // VIEW_OWN: only own cards selectable
+                      if (actionType === 'VIEW_OWN') {
+                        return player.id === sessionId
+                      }
+
+                      // VIEW_OPPONENT: only opponent cards selectable
+                      if (actionType === 'VIEW_OPPONENT') {
+                        return player.id !== sessionId
+                      }
+
+                      // SWAP_CARDS, KING_VIEW, KING_SWAP: any card selectable
+                      if (
+                        actionType === 'SWAP_CARDS' ||
+                        actionType === 'KING_VIEW' ||
+                        actionType === 'KING_SWAP'
+                      ) {
+                        return true
+                      }
+                    }
+
+                    // Stack phase: stack caller can select any card
+                    if (
+                      gamePhase === GamePhase.STACK_CALLED &&
+                      gamePlayState.stackCaller?.playerId === sessionId
+                    ) {
+                      return true
+                    }
+
+                    return false
+                  })(),
                 }))}
                 onCardClick={
                   isInGame
@@ -324,6 +368,7 @@ export default function RoomView() {
                   onDrawFromDeck={handleDeckClick}
                   onDrawnCardClick={handleDrawnCardClick}
                   isCurrentPlayerTurn={isMyTurn}
+                  gamePhase={gamePhase}
                 />
               </motion.div>
             )}

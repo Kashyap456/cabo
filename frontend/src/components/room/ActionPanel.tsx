@@ -22,12 +22,13 @@ export default function ActionPanel() {
   // Determine button states
   const canCallStack = () => {
     // Can call stack during turn_transition or waiting_for_special_action phases
-    // But not if already in stack_called phase
+    // But not if already in stack_called phase or stack_turn_transition
     return (
       (phase === GamePhase.TURN_TRANSITION ||
         phase === GamePhase.WAITING_FOR_SPECIAL_ACTION ||
         phase === GamePhase.KING_VIEW_PHASE ||
         phase === GamePhase.KING_SWAP_PHASE) &&
+      phase !== GamePhase.STACK_TURN_TRANSITION &&
       !stackCaller
     )
   }
@@ -196,6 +197,8 @@ function getPhaseDisplay(phase: GamePhase): string {
       return 'King Swap'
     case GamePhase.STACK_CALLED:
       return 'Stack Called'
+    case GamePhase.STACK_TURN_TRANSITION:
+      return 'Stack Result'
     case GamePhase.TURN_TRANSITION:
       return 'Turn Transition'
     case GamePhase.ENDED:

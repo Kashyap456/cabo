@@ -281,7 +281,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       }
       
       // Clear special action when entering turn transition or stack phases
-      if (newPhase === 'turn_transition' || newPhase === 'stack_called') {
+      if (newPhase === 'turn_transition' || newPhase === 'stack_turn_transition' || newPhase === 'stack_called') {
         setSpecialAction(null)
       }
       
@@ -441,14 +441,20 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         }
       }
       
+      // Handle phase transition if specified
+      if (gameEvent.data.phase === 'stack_turn_transition') {
+        setPhase(GamePhase.STACK_TURN_TRANSITION)
+      }
+      
       // Clear stack caller and continue game
       clearStackCaller()
       break
     }
 
     case 'stack_failed': {
-      console.log('Stack failed by:', gameEvent.data.player, 'penalty:', gameEvent.data.penalty_card, 
-        'penalty_card_id:', gameEvent.data.penalty_card_id)
+      console.log('Stack failed by:', gameEvent.data.player, 'attempted card:', gameEvent.data.attempted_card,
+        'target player:', gameEvent.data.target_player_id, 'card index:', gameEvent.data.target_player_index,
+        'penalty:', gameEvent.data.penalty_card, 'penalty_card_id:', gameEvent.data.penalty_card_id)
       
       // Remove penalty card from deck (for animation)
       if (gameEvent.data.penalty_card_id) {
@@ -456,20 +462,66 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         setDeckCards(currentDeck)
       }
       
-      // Player drew a penalty card
-      const player = getPlayerById(gameEvent.data.player_id)
-      if (player && gameEvent.data.penalty_card) {
-        // Parse the penalty card from backend
+      // Add penalty card to the stack caller
+      const stackCaller = getPlayerById(gameEvent.data.player_id)
+      if (stackCaller && gameEvent.data.penalty_card) {
         const parsedCard = parseCardString(gameEvent.data.penalty_card, gameEvent.data.penalty_card_id)
         const penaltyCard = {
           ...parsedCard,
           isTemporarilyViewed: false
         } as GameCard
-        const updatedCards = [...player.cards, penaltyCard]
-        updatePlayerCards(gameEvent.data.player_id, updatedCards)
+        const updatedStackCallerCards = [...stackCaller.cards, penaltyCard]
+        updatePlayerCards(gameEvent.data.player_id, updatedStackCallerCards)
       }
       
-      // Clear stack caller and continue game
+      // If this was an opponent stack attempt, reveal the card they tried to stack
+      // target_player_id is who they targeted, target_player_index is the card index
+      if (gameEvent.data.target_player_id) {
+        const targetPlayer = getPlayerById(gameEvent.data.target_player_id)
+        if (targetPlayer) {
+          const updatedTargetCards = [...targetPlayer.cards]
+          const cardIndex = gameEvent.data.target_player_index
+          
+          // Make the card in the target player's hand visible to everyone
+          if (cardIndex !== undefined && updatedTargetCards[cardIndex]) {
+            if (gameEvent.data.attempted_card && gameEvent.data.attempted_card_id) {
+              const attemptedCard = parseCardString(gameEvent.data.attempted_card, gameEvent.data.attempted_card_id)
+              updatedTargetCards[cardIndex] = {
+                ...attemptedCard,
+                isTemporarilyViewed: true  // Show the failed stack target to everyone
+              }
+            }
+          }
+          
+          updatePlayerCards(gameEvent.data.target_player_id, updatedTargetCards)
+        }
+      } else {
+        // Self-stack attempt - reveal the card from stack caller's hand
+        const stackCaller = getPlayerById(gameEvent.data.player_id)
+        if (stackCaller) {
+          const updatedCards = [...stackCaller.cards]
+          const cardIndex = gameEvent.data.target_player_index
+          
+          if (cardIndex !== undefined && updatedCards[cardIndex]) {
+            if (gameEvent.data.attempted_card && gameEvent.data.attempted_card_id) {
+              const attemptedCard = parseCardString(gameEvent.data.attempted_card, gameEvent.data.attempted_card_id)
+              updatedCards[cardIndex] = {
+                ...attemptedCard,
+                isTemporarilyViewed: true  // Show the failed self-stack card to everyone
+              }
+            }
+          }
+          
+          updatePlayerCards(gameEvent.data.player_id, updatedCards)
+        }
+      }
+      
+      // Handle phase transition if specified
+      if (gameEvent.data.phase === 'stack_turn_transition') {
+        setPhase(GamePhase.STACK_TURN_TRANSITION)
+      }
+      
+      // Clear stack caller after showing the result
       clearStackCaller()
       break
     }
@@ -495,6 +547,11 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
         } as GameCard
         const updatedCards = [...player.cards, penaltyCard]
         updatePlayerCards(gameEvent.data.player_id, updatedCards)
+      }
+      
+      // Handle phase transition if specified (should go to stack_turn_transition)
+      if (gameEvent.data.phase === 'stack_turn_transition') {
+        setPhase(GamePhase.STACK_TURN_TRANSITION)
       }
       
       clearStackCaller()

@@ -12,6 +12,7 @@ interface AnimatedCardProps {
   className?: string
   animationDelay?: number
   isSelected?: boolean
+  isSelectable?: boolean
 }
 
 const AnimatedCard = ({
@@ -24,6 +25,7 @@ const AnimatedCard = ({
   className,
   animationDelay = 0,
   isSelected = false,
+  isSelectable = false,
 }: AnimatedCardProps) => {
   const [isAnimatingFlip, setIsAnimatingFlip] = useState(false)
   const [showFace, setShowFace] = useState(!isFaceDown)
@@ -138,10 +140,10 @@ const AnimatedCard = ({
       animate={{ scale: isSelected ? 1.05 : 1, opacity: 1 }}
       // Only apply exit animation if there's no layoutId (no FLIP animation)
       exit={cardId ? undefined : { opacity: 0 }}
-      className={cn('w-12 h-18', className)}
-      whileHover={{ scale: 1.05, cursor: 'pointer' }}
-      whileTap={{ scale: 0.95, cursor: 'pointer' }}
-      onClick={onClick}
+      className={cn('w-12 h-18', className, isSelectable ? 'cursor-pointer' : 'cursor-default')}
+      whileHover={isSelectable ? { scale: 1.05 } : {}}
+      whileTap={isSelectable ? { scale: 0.95 } : {}}
+      onClick={isSelectable ? onClick : undefined}
     >
       {/* INNER: flip-only wrapper */}
       <AnimatePresence mode="popLayout" initial={false}>

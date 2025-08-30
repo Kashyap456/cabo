@@ -170,8 +170,9 @@ const PlayerGridSpot = ({
                     card.isSelectable &&
                       !card.isSelected &&
                       'hover:scale-105 cursor-pointer',
+                    !card.isSelectable && 'cursor-default',
                   )}
-                  whileHover={card.isSelectable ? { scale: 1.05 } : {}}
+                  whileHover={card.isSelectable && !card.isSelected ? { scale: 1.05 } : {}}
                   whileTap={card.isSelectable ? { scale: 0.95 } : {}}
                 >
                   {/* Selection ring */}
@@ -194,6 +195,7 @@ const PlayerGridSpot = ({
                     suit={card.suit}
                     isFaceDown={card.isFaceDown}
                     isSelected={card.isSelected}
+                    isSelectable={card.isSelectable}
                     onClick={onCardClick ? () => onCardClick(index) : undefined}
                   />
 
