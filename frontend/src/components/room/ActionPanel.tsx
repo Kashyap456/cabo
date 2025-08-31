@@ -1,4 +1,4 @@
-import { useGamePlayStore, GamePhase } from '../../stores/game_play_state'
+import { useGamePlayStore, GamePhase, type StackGiveTarget } from '../../stores/game_play_state'
 import { useAuthStore } from '../../stores/auth'
 import { useGameWebSocket } from '../../api/game_ws'
 import { useCallback, useState, useEffect } from 'react'
@@ -11,6 +11,7 @@ export default function ActionPanel() {
     drawnCard,
     specialAction,
     stackCaller,
+    stackGiveTarget,
   } = useGamePlayStore()
 
   const { sessionId } = useAuthStore()
@@ -35,13 +36,21 @@ export default function ActionPanel() {
 
   const canSkip = () => {
     // Can skip during J/Q swap (swap_opponent) or king_swap_phase
-    if (!isMyTurn || !specialAction) return false
-
-    return (
-      (specialAction.type === 'SWAP_CARDS' &&
-        phase === GamePhase.WAITING_FOR_SPECIAL_ACTION) ||
-      phase === GamePhase.KING_SWAP_PHASE
-    )
+    if (specialAction && isMyTurn) {
+      if ((specialAction.type === 'SWAP_CARDS' &&
+           phase === GamePhase.WAITING_FOR_SPECIAL_ACTION) ||
+          phase === GamePhase.KING_SWAP_PHASE) {
+        return true
+      }
+    }
+    
+    // Can also skip during STACK_GIVE_CARD phase if you're the giver
+    if (phase === GamePhase.STACK_GIVE_CARD && 
+        stackGiveTarget?.fromPlayer === sessionId) {
+      return true
+    }
+    
+    return false
   }
 
   const canCallCabo = () => {
@@ -66,7 +75,10 @@ export default function ActionPanel() {
   const handleSkip = useCallback(() => {
     if (!canSkip()) return
 
-    if (phase === GamePhase.KING_SWAP_PHASE) {
+    if (phase === GamePhase.STACK_GIVE_CARD) {
+      // Skip giving card after opponent stack
+      sendMessage({ type: 'skip_give_stack_card' })
+    } else if (phase === GamePhase.KING_SWAP_PHASE) {
       // King swap skip
       sendMessage({ type: 'king_skip_swap' })
     } else if (specialAction?.type === 'SWAP_CARDS') {

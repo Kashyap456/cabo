@@ -11,7 +11,7 @@ import json
 from services.game_manager import (
     CaboGame, GameEvent, GameMessage, MessageType,
     DrawCardMessage, PlayDrawnCardMessage, ReplaceAndPlayMessage,
-    CallStackMessage, ExecuteStackMessage, GiveStackCardMessage, CallCaboMessage,
+    CallStackMessage, ExecuteStackMessage, GiveStackCardMessage, SkipGiveStackCardMessage, CallCaboMessage,
     ViewOwnCardMessage, ViewOpponentCardMessage, SwapCardsMessage,
     KingViewCardMessage, KingSwapCardsMessage, KingSkipSwapMessage, SkipSwapMessage,
     GamePhase
@@ -271,6 +271,10 @@ class GameOrchestrator:
                 return GiveStackCardMessage(
                     player_id=session_id,
                     card_index=data.get("card_index", 0)
+                )
+            elif msg_type == "skip_give_stack_card":
+                return SkipGiveStackCardMessage(
+                    player_id=session_id
                 )
             elif msg_type == "call_cabo":
                 return CallCaboMessage(player_id=session_id)

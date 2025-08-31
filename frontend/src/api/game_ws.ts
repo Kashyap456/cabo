@@ -472,6 +472,21 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       break
     }
     
+    case 'stack_give_skipped': {
+      // Player chose to skip giving a card
+      // Clear stack give target
+      setStackGiveTarget(null)
+      
+      // Move to stack turn transition
+      if (gameEvent.data.phase === 'stack_turn_transition') {
+        setPhase(GamePhase.STACK_TURN_TRANSITION)
+      }
+      
+      // Clear stack caller
+      clearStackCaller()
+      break
+    }
+    
     case 'stack_give_timeout': {
       // Timeout during give card phase - random card was given
       const giver = getPlayerById(gameEvent.data.player_id)

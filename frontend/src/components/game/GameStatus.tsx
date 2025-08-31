@@ -7,6 +7,7 @@ const GameStatus = () => {
     phase,
     specialAction,
     stackCaller,
+    stackGiveTarget,
     getCurrentPlayer,
     getPlayerById,
     caboCalledBy,
@@ -20,6 +21,27 @@ const GameStatus = () => {
 
   // Collect all active statuses
   const statuses = []
+  
+  // Stack Give Card phase
+  if (phase === GamePhase.STACK_GIVE_CARD && stackGiveTarget) {
+    const giver = getPlayerById(stackGiveTarget.fromPlayer)
+    const receiver = getPlayerById(stackGiveTarget.toPlayer)
+    const isGiver = stackGiveTarget.fromPlayer === currentUserId
+    
+    statuses.push({
+      key: 'stack-give',
+      type: 'stack-give',
+      title: isGiver 
+        ? '🎁 Stack Success - Your Choice'
+        : `🎁 ${giver?.nickname}'s Stack Success`,
+      message: isGiver
+        ? `Great stack! Choose a card from your hand to give to ${receiver?.nickname} (optional - you can skip this).`
+        : `${giver?.nickname} successfully stacked! They may choose to give a card to ${receiver?.nickname}.`,
+      color: 'bg-purple-50 border-purple-400',
+      titleColor: 'text-purple-800',
+      messageColor: 'text-purple-700',
+    })
+  }
 
   // Stack called
   if (stackCaller) {
