@@ -993,6 +993,14 @@ export const useGameWebSocket = () => {
         break
       }
       
+      case 'player_nickname_updated': {
+        // Update player nickname in room store (only needed for waiting room)
+        const { player_id, nickname } = message
+        const { updatePlayerNickname } = useRoomStore.getState()
+        updatePlayerNickname(player_id, nickname)
+        break
+      }
+      
       case 'ready': {
         const readyMessage = message as ReadyMessage
         setCurrentSeq(readyMessage.current_seq)

@@ -223,6 +223,31 @@ async def handle_lobby_message(websocket: WebSocket, session: UserSession, messa
             "nickname": session.nickname,
             "room_id": str(current_membership.room_id) if current_membership else None
         })
+    elif msg_type == "update_nickname":
+        # Handle nickname update broadcast
+        new_nickname = message.get("nickname")
+        if new_nickname:
+            # Update the session's nickname in memory (already updated in DB via API)
+            session.nickname = new_nickname
+            
+            # Get the user's current room
+            membership_result = await db.execute(
+                select(UserToRoom).where(UserToRoom.user_id == session.user_id)
+            )
+            membership = membership_result.scalar_one_or_none()
+            
+            if membership:
+                room = await room_manager.get_room_by_id(db, str(membership.room_id))
+                if room and room.phase == RoomPhase.WAITING:
+                    # Broadcast updated room state to all players
+                    await send_room_state(room, db)
+                elif room and room.phase == RoomPhase.IN_GAME:
+                    # Broadcast nickname update message to all players in game
+                    await connection_manager.broadcast_to_room(str(room.room_id), {
+                        "type": "player_nickname_updated",
+                        "player_id": str(session.user_id),
+                        "nickname": new_nickname
+                    })
     else:
         await websocket.send_json({
             "type": "error",

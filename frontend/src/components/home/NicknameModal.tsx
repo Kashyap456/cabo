@@ -1,7 +1,9 @@
-import useCreateSession from '@/api/auth'
+import useCreateSession, { useUpdateNickname } from '@/api/auth'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useState } from 'react'
 import { useAuthStore } from '@/stores/auth'
+import { useRoomStore } from '@/stores/game_state'
+import { useGameWebSocket } from '@/api/game_ws'
 
 interface NicknameModalProps {
   open: boolean
@@ -11,14 +13,40 @@ interface NicknameModalProps {
 const NicknameModal = ({ open, onOpenChange }: NicknameModalProps) => {
   const [nickname, setNickname] = useState('')
   const { mutate: createSession } = useCreateSession()
-  const currentNickname = useAuthStore((state) => state.nickname)
+  const { mutate: updateNickname } = useUpdateNickname()
+  const { nickname: currentNickname, sessionId } = useAuthStore()
+  const { roomCode } = useRoomStore()
+  const { sendMessage } = useGameWebSocket()
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (nickname.trim()) {
-      createSession(nickname.trim())
-      setNickname('')
-      onOpenChange(false)
+      const trimmedNickname = nickname.trim()
+      
+      if (currentNickname && sessionId) {
+        // Update existing session
+        updateNickname(trimmedNickname, {
+          onSuccess: () => {
+            // If in a room, broadcast nickname change via WebSocket
+            if (roomCode) {
+              sendMessage({ 
+                type: 'update_nickname', 
+                nickname: trimmedNickname 
+              })
+            }
+            setNickname('')
+            onOpenChange(false)
+          }
+        })
+      } else {
+        // Create new session
+        createSession(trimmedNickname, {
+          onSuccess: () => {
+            setNickname('')
+            onOpenChange(false)
+          }
+        })
+      }
     }
   }
 

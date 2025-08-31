@@ -26,6 +26,11 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
   removePlayer: (playerId) => set((state) => ({ 
     players: state.players.filter(p => p.id !== playerId) 
   })),
+  updatePlayerNickname: (playerId, nickname) => set((state) => ({
+    players: state.players.map(p => 
+      p.id === playerId ? { ...p, nickname } : p
+    )
+  })),
   currentSeq: 0,
   setCurrentSeq: (seq) => set({ currentSeq: seq }),
   isReady: false,
@@ -62,6 +67,7 @@ interface RoomStore {
   setPlayers: (players: Player[]) => void
   addPlayer: (player: Player) => void
   removePlayer: (playerId: string) => void
+  updatePlayerNickname: (playerId: string, nickname: string) => void
   currentSeq: number
   setCurrentSeq: (seq: number) => void
   isReady: boolean
