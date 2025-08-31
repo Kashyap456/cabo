@@ -48,6 +48,7 @@ export enum GamePhase {
   KING_VIEW_PHASE = 'king_view_phase',
   KING_SWAP_PHASE = 'king_swap_phase',
   STACK_CALLED = 'stack_called',
+  STACK_GIVE_CARD = 'stack_give_card',  // After successful opponent stack, choose card to give
   STACK_TURN_TRANSITION = 'stack_turn_transition',  // Show stack card after failure, prevent stacking
   TURN_TRANSITION = 'turn_transition',
   ENDED = 'ended'
@@ -70,6 +71,12 @@ export interface StackCaller {
   playerId: string
   nickname: string
   timestamp: number  // When the stack call was made
+}
+
+export interface StackGiveTarget {
+  fromPlayer: string  // Who is giving the card
+  toPlayer: string    // Who is receiving the card
+  targetCardIndex?: number  // Where the target's card was removed from
 }
 
 export interface EndGameData {
@@ -120,6 +127,9 @@ export interface GamePlayState {
   // Stack caller - only one can win the race
   stackCaller: StackCaller | null
   
+  // Stack give target - for opponent stack success
+  stackGiveTarget: StackGiveTarget | null
+  
   // Currently being viewed card (for visual indication)
   viewingIndicator: { playerId: string; cardIndex: number } | null
   
@@ -147,6 +157,7 @@ export interface GamePlayState {
   clearSelectedCards: () => void
   setStackCaller: (stackCaller: StackCaller | null) => void
   clearStackCaller: () => void
+  setStackGiveTarget: (target: StackGiveTarget | null) => void
   setViewingIndicator: (indicator: { playerId: string; cardIndex: number } | null) => void
   setCalledCabo: (playerId: string) => void
   resetGameState: () => void
@@ -180,6 +191,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   specialAction: null,
   selectedCards: [],
   stackCaller: null,
+  stackGiveTarget: null,
   viewingIndicator: null,
   caboCalledBy: null,
   finalRoundStarted: false,
@@ -259,6 +271,8 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   
   clearStackCaller: () => set({ stackCaller: null }),
   
+  setStackGiveTarget: (target) => set({ stackGiveTarget: target }),
+  
   setViewingIndicator: (indicator) => set({ viewingIndicator: indicator }),
   
   setCalledCabo: (playerId) => set((state) => ({
@@ -282,6 +296,7 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
     specialAction: null,
     selectedCards: [],
     stackCaller: null,
+    stackGiveTarget: null,
     caboCalledBy: null,
     finalRoundStarted: false,
     endGameData: null
@@ -332,13 +347,19 @@ export const useGamePlayStore = create<GamePlayState>((set, get) => ({
   
   isCardSelectable: (playerId, cardIndex, sessionId) => {
     const state = get()
-    const { phase, specialAction, currentPlayerId, stackCaller } = state
+    const { phase, specialAction, currentPlayerId, stackCaller, stackGiveTarget } = state
     
     // Check if we're in stack selection mode
     // sessionId should be the current user's session ID
     if (phase === GamePhase.STACK_CALLED && stackCaller?.playerId === sessionId) {
       // During stack, the stack caller can select any card (own or opponent's)
       return true
+    }
+    
+    // Check if we're in stack give card phase
+    if (phase === GamePhase.STACK_GIVE_CARD && stackGiveTarget?.fromPlayer === sessionId) {
+      // Can only select own cards to give
+      return playerId === sessionId
     }
     
     // Not selectable if no special action or not in the right phase

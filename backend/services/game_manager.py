@@ -163,7 +163,10 @@ class GamePhase(Enum):
     KING_VIEW_PHASE = "king_view_phase"
     KING_SWAP_PHASE = "king_swap_phase"
     STACK_CALLED = "stack_called"
-    STACK_TURN_TRANSITION = "stack_turn_transition"  # Show stack card after failure, prevent stacking
+    # After successful opponent stack, choose card to give
+    STACK_GIVE_CARD = "stack_give_card"
+    # Show stack card after failure, prevent stacking
+    STACK_TURN_TRANSITION = "stack_turn_transition"
     TURN_TRANSITION = "turn_transition"
     ENDED = "ended"
 
@@ -176,6 +179,7 @@ class MessageType(Enum):
     REPLACE_AND_PLAY = "replace_and_play"
     CALL_STACK = "call_stack"
     EXECUTE_STACK = "execute_stack"
+    GIVE_STACK_CARD = "give_stack_card"
     CALL_CABO = "call_cabo"
     VIEW_OWN_CARD = "view_own_card"
     VIEW_OPPONENT_CARD = "view_opponent_card"
@@ -187,6 +191,7 @@ class MessageType(Enum):
 
     # System events
     STACK_TIMEOUT = "stack_timeout"
+    STACK_GIVE_TIMEOUT = "stack_give_timeout"
     SPECIAL_ACTION_TIMEOUT = "special_action_timeout"
     STACK_TURN_TRANSITION_TIMEOUT = "stack_turn_transition_timeout"
     TURN_TRANSITION_TIMEOUT = "turn_transition_timeout"
@@ -234,6 +239,12 @@ class ExecuteStackMessage(PlayerActionMessage):
     card_index: int = 0
     target_player_id: Optional[str] = None
     type: MessageType = MessageType.EXECUTE_STACK
+
+
+@dataclass
+class GiveStackCardMessage(PlayerActionMessage):
+    card_index: int = 0
+    type: MessageType = MessageType.GIVE_STACK_CARD
 
 
 @dataclass
@@ -299,6 +310,11 @@ class StackTimeoutMessage(SystemMessage):
 
 
 @dataclass
+class StackGiveTimeoutMessage(SystemMessage):
+    type: MessageType = MessageType.STACK_GIVE_TIMEOUT
+
+
+@dataclass
 class SpecialActionTimeoutMessage(SystemMessage):
     type: MessageType = MessageType.SPECIAL_ACTION_TIMEOUT
 
@@ -306,6 +322,7 @@ class SpecialActionTimeoutMessage(SystemMessage):
 @dataclass
 class StackTurnTransitionTimeoutMessage(SystemMessage):
     type: MessageType = MessageType.STACK_TURN_TRANSITION_TIMEOUT
+
 
 @dataclass
 class TurnTransitionTimeoutMessage(SystemMessage):
@@ -344,6 +361,11 @@ class GameState:
     played_card: Optional[Card] = None
     stack_caller: Optional[str] = None
     stack_timer_id: Optional[str] = None
+    # Target player to give card to after successful opponent stack
+    stack_give_target: Optional[str] = None
+    # Index where target's card was removed from
+    stack_give_target_index: Optional[int] = None
+    stack_give_timer_id: Optional[str] = None
     special_action_player: Optional[str] = None
     special_action_type: Optional[str] = None
     special_action_timer_id: Optional[str] = None
@@ -434,6 +456,9 @@ class CaboGame:
             if timeout_id == self.state.stack_timer_id:
                 self.message_queue.put(StackTimeoutMessage())
                 self.state.stack_timer_id = None
+            elif timeout_id == self.state.stack_give_timer_id:
+                self.message_queue.put(StackGiveTimeoutMessage())
+                self.state.stack_give_timer_id = None
             elif timeout_id == self.state.special_action_timer_id:
                 self.message_queue.put(SpecialActionTimeoutMessage())
                 self.state.special_action_timer_id = None
@@ -489,6 +514,7 @@ class CaboGame:
             MessageType.REPLACE_AND_PLAY: self._handle_replace_and_play,
             MessageType.CALL_STACK: self._handle_call_stack,
             MessageType.EXECUTE_STACK: self._handle_execute_stack,
+            MessageType.GIVE_STACK_CARD: self._handle_give_stack_card,
             MessageType.CALL_CABO: self._handle_call_cabo,
             MessageType.VIEW_OWN_CARD: self._handle_view_own_card,
             MessageType.VIEW_OPPONENT_CARD: self._handle_view_opponent_card,
@@ -498,6 +524,7 @@ class CaboGame:
             MessageType.KING_SWAP_CARDS: self._handle_king_swap_cards,
             MessageType.KING_SKIP_SWAP: self._handle_king_skip_swap,
             MessageType.STACK_TIMEOUT: self._handle_stack_timeout,
+            MessageType.STACK_GIVE_TIMEOUT: self._handle_stack_give_timeout,
             MessageType.SPECIAL_ACTION_TIMEOUT: self._handle_special_action_timeout,
             MessageType.STACK_TURN_TRANSITION_TIMEOUT: self._handle_stack_turn_transition_timeout,
             MessageType.TURN_TRANSITION_TIMEOUT: self._handle_turn_transition_timeout,
@@ -755,7 +782,8 @@ class CaboGame:
         if self.state.phase != GamePhase.STACK_CALLED:
             return {"success": False, "error": "Not in stack phase"}
 
-        player = self.get_player_by_id(message.player_id)
+        player_id_to_check = message.target_player_id if message.target_player_id else message.player_id
+        player = self.get_player_by_id(player_id_to_check)
         if not player:
             return {"success": False, "error": "Player not found"}
 
@@ -764,9 +792,6 @@ class CaboGame:
 
         stack_card = player.hand[message.card_index]
         played_card = self.state.played_card
-
-        # Clear stack state
-        self._clear_stack_state()
 
         next_messages = [NextTurnMessage()]
 
@@ -782,7 +807,7 @@ class CaboGame:
                 self.state.phase = GamePhase.STACK_TURN_TRANSITION
                 self.state.stack_turn_transition_timer_id = self._schedule_timeout(
                     StackTurnTransitionTimeoutMessage(), 5.0)
-                
+
                 return {
                     "success": True,
                     "event": GameEvent("stack_success", {
@@ -797,33 +822,56 @@ class CaboGame:
                     "next_messages": []  # Don't send NextTurnMessage immediately
                 }
             else:
-                # Opponent stack - give card to opponent
+                # Opponent stack - verify and process
                 target_player = self.get_player_by_id(message.target_player_id)
                 if not target_player:
                     return {"success": False, "error": "Target player not found"}
 
-                player.hand.pop(message.card_index)
-                target_player.add_card(stack_card)
+                # Find a matching card in target's hand
+                target_card_index = None
+                for i, target_card in enumerate(target_player.hand):
+                    if target_card.rank == played_card.rank:
+                        target_card_index = i
+                        break
 
-                # Enter stack_turn_transition phase to show the successful stack
-                self.state.phase = GamePhase.STACK_TURN_TRANSITION
-                self.state.stack_turn_transition_timer_id = self._schedule_timeout(
-                    StackTurnTransitionTimeoutMessage(), 5.0)
-                
+                if target_card_index is None:
+                    # This shouldn't happen if frontend validation is correct
+                    return {"success": False, "error": "Target has no matching card"}
+
+                # Remove the matched card from target's hand
+                target_matched_card = target_player.hand.pop(target_card_index)
+                self.discard_pile.append(target_matched_card)
+
+                # Target draws a penalty card to replace at the same index
+                penalty_card = self.deck.draw()
+                if penalty_card:
+                    target_player.hand.insert(target_card_index, penalty_card)
+
+                # Store info for the give card phase
+                self.state.stack_give_target = message.target_player_id
+                self.state.stack_give_target_index = target_card_index
+
+                # Enter phase to choose card to give
+                self.state.phase = GamePhase.STACK_GIVE_CARD
+                self.state.stack_give_timer_id = self._schedule_timeout(
+                    StackGiveTimeoutMessage(), 30.0)
+                original_player = self.get_player_by_id(message.player_id)
                 return {
                     "success": True,
-                    "event": GameEvent("stack_success", {
-                        "type": "opponent_stack",
-                        "player": player.name,
-                        "player_id": player.player_id,
-                        "card_index": message.card_index,
+                    "event": GameEvent("stack_success_choose_card", {
+                        "type": "opponent_stack_success",
+                        "player": original_player.name,
+                        "player_id": original_player.player_id,
                         "target": target_player.name,
                         "target_id": target_player.player_id,
-                        "given_card": str(stack_card),
-                        "given_card_id": stack_card.identity,
-                        "phase": "stack_turn_transition"
+                        "target_matched_card": str(target_matched_card),
+                        "target_matched_card_id": target_matched_card.identity,
+                        "target_card_index": target_card_index,
+                        "penalty_card": str(penalty_card) if penalty_card else None,
+                        "penalty_card_id": penalty_card.identity if penalty_card else None,
+                        "phase": "stack_give_card"
                     }),
-                    "next_messages": []  # Don't send NextTurnMessage immediately
+                    "next_messages": []
                 }
         else:
             # Failed stack - player draws a card
@@ -835,12 +883,14 @@ class CaboGame:
             self.state.phase = GamePhase.STACK_TURN_TRANSITION
             self.state.stack_turn_transition_timer_id = self._schedule_timeout(
                 StackTurnTransitionTimeoutMessage(), 5.0)
-            
+
+            original_player = self.get_player_by_id(message.player_id)
+
             return {
                 "success": True,
                 "event": GameEvent("stack_failed", {
-                    "player": player.name,
-                    "player_id": player.player_id,
+                    "player": original_player.name,
+                    "player_id": original_player.player_id,
                     "attempted_card": str(stack_card),
                     "attempted_card_id": stack_card.identity,
                     "target_player_id": message.target_player_id,
@@ -851,6 +901,60 @@ class CaboGame:
                 }),
                 "next_messages": []  # Don't send NextTurnMessage immediately
             }
+
+    def _handle_give_stack_card(self, message: GiveStackCardMessage) -> Dict[str, Any]:
+        """Handle giving a card after successful opponent stack"""
+        if self.state.phase != GamePhase.STACK_GIVE_CARD:
+            print("ISSUE 1")
+            return {"success": False, "error": "Not in give card phase"}
+
+        if self.state.stack_caller != message.player_id:
+            print("ISSUE 2")
+            return {"success": False, "error": "You are not the stack winner"}
+
+        player = self.get_player_by_id(message.player_id)
+        target_player = self.get_player_by_id(self.state.stack_give_target)
+
+        if not player or not target_player:
+            print("ISSUE 3")
+            return {"success": False, "error": "Player not found"}
+
+        if not (0 <= message.card_index < len(player.hand)):
+            print("ISSUE 4")
+            return {"success": False, "error": "Invalid card index"}
+
+        # Give the chosen card to opponent
+        given_card = player.hand.pop(message.card_index)
+        target_player.add_card(given_card)
+
+        # Clear stack give state
+        self.state.stack_give_target = None
+        self.state.stack_give_target_index = None
+        if self.state.stack_give_timer_id:
+            self.pending_timeouts.pop(self.state.stack_give_timer_id, None)
+            self.state.stack_give_timer_id = None
+
+        # Clear stack caller
+        self._clear_stack_state()
+
+        # Now enter stack_turn_transition
+        self.state.phase = GamePhase.STACK_TURN_TRANSITION
+        self.state.stack_turn_transition_timer_id = self._schedule_timeout(
+            StackTurnTransitionTimeoutMessage(), 5.0)
+
+        return {
+            "success": True,
+            "event": GameEvent("stack_card_given", {
+                "player": player.name,
+                "player_id": player.player_id,
+                "target": target_player.name,
+                "target_id": target_player.player_id,
+                "given_card": str(given_card),
+                "given_card_id": given_card.identity,
+                "phase": "stack_turn_transition"
+            }),
+            "next_messages": []
+        }
 
     def _handle_stack_timeout(self, message: StackTimeoutMessage) -> Dict[str, Any]:
         """Handle stack timeout"""
@@ -876,6 +980,51 @@ class CaboGame:
                 "penalty_card_id": drawn_card.identity if drawn_card else None
             }),
             "next_messages": [NextTurnMessage()]
+        }
+
+    def _handle_stack_give_timeout(self, message: StackGiveTimeoutMessage) -> Dict[str, Any]:
+        """Handle stack give timeout - give a random card"""
+        if self.state.phase != GamePhase.STACK_GIVE_CARD:
+            return {"success": False, "error": "Not in stack give phase"}
+
+        player = self.get_player_by_id(self.state.stack_caller)
+        target_player = self.get_player_by_id(self.state.stack_give_target)
+
+        if player and target_player and len(player.hand) > 0:
+            # Give a random card on timeout
+            import random
+            card_index = random.randint(0, len(player.hand) - 1)
+            given_card = player.hand.pop(card_index)
+            target_player.add_card(given_card)
+
+            events = [GameEvent("stack_give_timeout", {
+                "player": player.name,
+                "player_id": player.player_id,
+                "target": target_player.name,
+                "target_id": target_player.player_id,
+                "given_card": str(given_card),
+                "given_card_id": given_card.identity
+            })]
+        else:
+            events = [GameEvent("stack_give_timeout", {})]
+
+        # Clear stack give state
+        self.state.stack_give_target = None
+        self.state.stack_give_target_index = None
+        if self.state.stack_give_timer_id:
+            self.pending_timeouts.pop(self.state.stack_give_timer_id, None)
+            self.state.stack_give_timer_id = None
+
+        # Clear stack state and move to turn transition
+        self._clear_stack_state()
+        self.state.phase = GamePhase.STACK_TURN_TRANSITION
+        self.state.stack_turn_transition_timer_id = self._schedule_timeout(
+            StackTurnTransitionTimeoutMessage(), 5.0)
+
+        return {
+            "success": True,
+            "events": events,
+            "next_messages": []
         }
 
     def _handle_call_cabo(self, message: CallCaboMessage) -> Dict[str, Any]:
@@ -1453,12 +1602,16 @@ class CaboGame:
 
     def _handle_stack_turn_transition_timeout(self, message: StackTurnTransitionTimeoutMessage) -> Dict[str, Any]:
         """Handle stack turn transition timeout"""
-        print(f"DEBUG: _handle_stack_turn_transition_timeout called, adding NextTurnMessage")
+        print(
+            f"DEBUG: _handle_stack_turn_transition_timeout called, adding NextTurnMessage")
         # Clear stack turn transition state
         if self.state.stack_turn_transition_timer_id:
             self.pending_timeouts.pop(
                 self.state.stack_turn_transition_timer_id, None)
             self.state.stack_turn_transition_timer_id = None
+
+            # Clear stack state
+        self._clear_stack_state()
 
         # Clear all temporary card visibility
         self.state.card_visibility.clear()

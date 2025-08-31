@@ -203,6 +203,22 @@ export default function RoomView() {
             target_player_id: playerId,
           })
         }
+        gamePlayState.clearSelectedCards()
+        return
+      }
+      
+      // Handle giving card after successful opponent stack
+      if (
+        gamePhase === GamePhase.STACK_GIVE_CARD &&
+        gamePlayState.stackGiveTarget?.fromPlayer === sessionId &&
+        playerId === sessionId  // Can only select own cards to give
+      ) {
+        sendMessage({
+          type: 'give_stack_card',
+          card_index: cardIndex,
+        })
+        gamePlayState.clearSelectedCards()
+        return
       }
     }
   }
@@ -357,6 +373,15 @@ export default function RoomView() {
                     if (
                       gamePhase === GamePhase.STACK_CALLED &&
                       gamePlayState.stackCaller?.playerId === sessionId
+                    ) {
+                      return true
+                    }
+                    
+                    // Stack give card phase: giver can select own cards to give
+                    if (
+                      gamePhase === GamePhase.STACK_GIVE_CARD &&
+                      gamePlayState.stackGiveTarget?.fromPlayer === sessionId &&
+                      player.id === sessionId
                     ) {
                       return true
                     }

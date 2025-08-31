@@ -183,6 +183,7 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
     setSpecialAction,
     setStackCaller,
     clearStackCaller,
+    setStackGiveTarget,
     setViewingIndicator,
     setCalledCabo,
     getPlayerById,
@@ -403,8 +404,108 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
       break
     }
 
+    case 'stack_success_choose_card': {
+      // Successful opponent stack - need to choose card to give
+      const stacker = getPlayerById(gameEvent.data.player_id)
+      const target = getPlayerById(gameEvent.data.target_id)
+      
+      if (target && gameEvent.data.target_card_index !== undefined) {
+        // Remove the matched card from target's hand at the specified index
+        const updatedTargetCards = [...target.cards]
+        updatedTargetCards.splice(gameEvent.data.target_card_index, 1)
+        const finalTargetCards = [...updatedTargetCards, 
+          parseCardString(gameEvent.data.penalty_card, 
+                          gameEvent.data.penalty_card_id)]
+        updatePlayerCards(gameEvent.data.target_id, finalTargetCards)
+        addCardToDiscard(
+          parseCardString(
+            gameEvent.data.target_matched_card,
+            gameEvent.data.target_matched_card_id))
+      }
+      
+      // Set phase to allow choosing card to give
+      setPhase(GamePhase.STACK_GIVE_CARD)
+      
+      // Clear any previous card selections
+      useGamePlayStore.getState().clearSelectedCards()
+      
+      // Track who needs to give a card to whom
+      setStackGiveTarget({
+        fromPlayer: gameEvent.data.player_id,
+        toPlayer: gameEvent.data.target_id,
+        targetCardIndex: gameEvent.data.target_card_index
+      })
+      break
+    }
+    
+    case 'stack_card_given': {
+      // Card has been given to the target player
+      const giver = getPlayerById(gameEvent.data.player_id)
+      const receiver = getPlayerById(gameEvent.data.target_id)
+      
+      if (giver && gameEvent.data.given_card_id) {
+        // Remove the given card from giver's hand
+        const updatedGiverCards = giver.cards.filter(c => c.id !== gameEvent.data.given_card_id)
+        updatePlayerCards(gameEvent.data.player_id, updatedGiverCards)
+      }
+      
+      if (receiver && gameEvent.data.given_card && gameEvent.data.given_card_id) {
+        // Add the given card to receiver's hand
+        const givenCard = parseCardString(gameEvent.data.given_card, gameEvent.data.given_card_id)
+        const updatedReceiverCards = [...receiver.cards, {
+          ...givenCard,
+          isTemporarilyViewed: false
+        }]
+        updatePlayerCards(gameEvent.data.target_id, updatedReceiverCards)
+      }
+      
+      // Clear stack give target
+      setStackGiveTarget(null)
+      
+      // Handle phase transition if specified
+      if (gameEvent.data.phase === 'stack_turn_transition') {
+        setPhase(GamePhase.STACK_TURN_TRANSITION)
+      }
+      
+      // Clear stack caller
+      clearStackCaller()
+      break
+    }
+    
+    case 'stack_give_timeout': {
+      // Timeout during give card phase - random card was given
+      const giver = getPlayerById(gameEvent.data.player_id)
+      const receiver = getPlayerById(gameEvent.data.target_id)
+      
+      if (giver && gameEvent.data.given_card_id) {
+        // Remove the given card from giver's hand
+        const updatedGiverCards = giver.cards.filter(c => c.id !== gameEvent.data.given_card_id)
+        updatePlayerCards(gameEvent.data.player_id, updatedGiverCards)
+      }
+      
+      if (receiver && gameEvent.data.given_card && gameEvent.data.given_card_id) {
+        // Add the given card to receiver's hand
+        const givenCard = parseCardString(gameEvent.data.given_card, gameEvent.data.given_card_id)
+        const updatedReceiverCards = [...receiver.cards, {
+          ...givenCard,
+          isTemporarilyViewed: false
+        }]
+        updatePlayerCards(gameEvent.data.target_id, updatedReceiverCards)
+      }
+      
+      // Clear stack give target
+      setStackGiveTarget(null)
+      
+      // Move to stack turn transition
+      setPhase(GamePhase.STACK_TURN_TRANSITION)
+      
+      // Clear stack caller
+      clearStackCaller()
+      break
+    }
+
     case 'stack_success': {
-      // Handle card updates based on stack type
+      // Handle card updates based on stack type (for self-stack only now)
       if (gameEvent.data.type === 'self_stack') {
         // Player discarded their own card
         const player = getPlayerById(gameEvent.data.player_id)
@@ -413,28 +514,8 @@ const handleGameEvent = (gameEvent: GameEventMessage) => {
           const updatedCards = player.cards.filter((_, index) => index !== gameEvent.data.card_index)
           updatePlayerCards(gameEvent.data.player_id, updatedCards)
         }
-      } else if (gameEvent.data.type === 'opponent_stack') {
-        // Player removed their card and gave it to opponent
-        const player = getPlayerById(gameEvent.data.player_id)
-        const target = getPlayerById(gameEvent.data.target_id)
-        
-        if (player && gameEvent.data.card_index !== undefined) {
-          // Remove card from player
-          const updatedPlayerCards = player.cards.filter((_, index) => index !== gameEvent.data.card_index)
-          updatePlayerCards(gameEvent.data.player_id, updatedPlayerCards)
-        }
-        
-        if (target && gameEvent.data.given_card) {
-          // Parse and add the given card to target
-          const parsedCard = parseCardString(gameEvent.data.given_card, gameEvent.data.given_card_id)
-          const newCard = {
-            ...parsedCard,
-            isTemporarilyViewed: false
-          } as GameCard
-          const updatedTargetCards = [...target.cards, newCard]
-          updatePlayerCards(gameEvent.data.target_id, updatedTargetCards)
-        }
       }
+      // Note: opponent_stack is now handled via stack_success_choose_card -> stack_card_given flow
       
       // Handle phase transition if specified
       if (gameEvent.data.phase === 'stack_turn_transition') {
