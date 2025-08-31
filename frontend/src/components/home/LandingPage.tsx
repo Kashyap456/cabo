@@ -6,6 +6,7 @@ import { useState } from 'react'
 import CaboLogo from '@/assets/cabo-logo.png'
 import CaboBackground from '@/assets/cabo-background.png'
 import WoodButton from '@/components/ui/WoodButton'
+import { Pencil } from 'lucide-react'
 
 const LandingPage = () => {
   const { nickname } = useAuthStore()
@@ -25,6 +26,21 @@ const LandingPage = () => {
       <CreateGameModal open={createGameOpen} onOpenChange={setCreateGameOpen} />
       <JoinGameModal open={joinGameOpen} onOpenChange={setJoinGameOpen} />
 
+      {nickname && (
+        <div className="fixed top-4 left-4 bg-amber-100 border-4 border-amber-900 rounded-lg p-3 shadow-lg z-50">
+          <div className="flex items-center gap-2">
+            <span className="text-amber-900 text-sm">Playing as:</span>
+            <span className="text-amber-900 font-bold text-lg">{nickname}</span>
+            <button
+              onClick={() => setNicknameModalOpen(true)}
+              className="text-amber-700 hover:text-amber-900 transition-colors cursor-pointer"
+            >
+              <Pencil size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col items-center justify-center h-screen gap-4">
         <img src={CaboLogo} alt="Cabo" className="h-96 mb-8" />
         <div className="flex flex-col gap-4 w-96">
@@ -43,11 +59,11 @@ const LandingPage = () => {
             Join Game
           </WoodButton>
           <WoodButton
-            onClick={() => setNicknameModalOpen(true)}
+            onClick={() => window.open('https://cambiocardgame.com/', '_blank')}
             variant="default"
             className="w-full"
           >
-            Change Nickname
+            How to Play
           </WoodButton>
         </div>
       </div>

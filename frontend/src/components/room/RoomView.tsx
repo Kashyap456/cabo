@@ -16,14 +16,17 @@ import GameStatus from '../game/GameStatus'
 import { calculatePlayerPositions } from '@/utils/tablePositions'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { Pencil } from 'lucide-react'
+import NicknameModal from '../home/NicknameModal'
 
 export default function RoomView() {
   // Room state
   const { players, roomCode, phase: roomPhase } = useRoomStore()
   const isHost = useIsHost()
-  const { sessionId } = useAuthStore()
+  const { sessionId, nickname } = useAuthStore()
   const startGameMutation = useStartGame()
   const navigate = useNavigate()
+  const [nicknameModalOpen, setNicknameModalOpen] = useState(false)
 
   // Game state (only used when in game)
   const gamePlayState = useGamePlayStore()
@@ -206,7 +209,27 @@ export default function RoomView() {
 
   return (
     <GameTable showPositionGuides={false} data-table-container>
+      <NicknameModal
+        open={nicknameModalOpen}
+        onOpenChange={setNicknameModalOpen}
+      />
       <LayoutGroup>
+        {/* Nickname board - show in waiting room or when game status not visible */}
+        {(!isInGame || isEndGame) && nickname && (
+          <div className="fixed top-4 left-4 bg-amber-100 border-4 border-amber-900 rounded-lg p-3 shadow-lg z-50">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-900 text-sm">Playing as:</span>
+              <span className="text-amber-900 font-bold text-lg">{nickname}</span>
+              <button
+                onClick={() => setNicknameModalOpen(true)}
+                className="text-amber-700 hover:text-amber-900 transition-colors cursor-pointer"
+              >
+                <Pencil size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+        
         {/* Game status - show in top left during game (but not endgame) */}
         {isInGame && !isEndGame && <GameStatus />}
 
