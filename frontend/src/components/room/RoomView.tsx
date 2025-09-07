@@ -247,10 +247,14 @@ export default function RoomView() {
         )}
         
         {/* Game status - show in top left during game (but not endgame) */}
+        {/* On mobile, position below deck during gameplay */}
         {isInGame && !isEndGame && <GameStatus />}
 
-        {/* Room info display - always visible */}
-        <div className="fixed top-4 right-4 z-20">
+        {/* Room info display - hidden on mobile during playing/endgame phases */}
+        <div className={cn(
+          "fixed top-4 right-4 z-20",
+          isInGame && "hidden sm:block"
+        )}>
           <div
             className="border-4 border-yellow-500/80 px-4 py-3 rounded-lg shadow-wood-deep"
             style={{
@@ -526,9 +530,9 @@ export default function RoomView() {
           </AnimatePresence>
         </div>
 
-        {/* Action Panel - bottom right corner, below player badges (hide during endgame) */}
+        {/* Action Panel - bottom right corner on desktop, repositioned on mobile */}
         {isInGame && !isEndGame && currentPlayer && (
-          <div className="fixed bottom-4 right-4 z-10">
+          <div className="fixed sm:bottom-4 sm:right-4 bottom-20 left-1/2 sm:left-auto -translate-x-1/2 sm:translate-x-0 z-10">
             <ActionPanel />
           </div>
         )}

@@ -22,20 +22,20 @@ const DrawnCardSlot = ({
 }: DrawnCardSlotProps) => {
   const isSelectable = drawnCard && isCurrentPlayer && gamePhase === GamePhase.CARD_DRAWN
   return (
-    <div className="relative w-12 h-18">
+    <div className="relative w-8 h-12 sm:w-12 sm:h-18">
       {/* Label for drawn card area */}
       {drawnCard && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="absolute -top-8 left-1/2 -translate-x-1/2 text-white text-xs font-bold whitespace-nowrap"
+          className="absolute -top-6 sm:-top-8 left-1/2 -translate-x-1/2 text-white text-[10px] sm:text-xs font-bold whitespace-nowrap"
         >
           {isCurrentPlayer ? 'Your Draw' : 'Drawn Card'}
         </motion.div>
       )}
 
       {/* Card slot */}
-      <div className="relative w-card h-card">
+      <div className="relative w-8 h-12 sm:w-12 sm:h-18">
         <AnimatePresence>
           {drawnCard ? (
             <AnimatedCard
@@ -45,14 +45,14 @@ const DrawnCardSlot = ({
               suit={drawnCard.isFaceDown ? undefined : drawnCard.suit}
               isFaceDown={drawnCard.isFaceDown !== false}
               isFlipped={false} // Never use the flip that mirrors
-              className="w-12 h-18 absolute inset-0"
+              className="w-8 h-12 sm:w-12 sm:h-18 absolute inset-0"
               onClick={onCardClick}
               isSelectable={isSelectable}
             />
           ) : (
             // Empty slot placeholder
-            <div className="w-12 h-18 border-2 border-dashed border-white/20 rounded-lg flex items-center justify-center text-center">
-              <span className="text-white/30 text-xs">Draw Slot</span>
+            <div className="w-8 h-12 sm:w-12 sm:h-18 border-2 border-dashed border-white/20 rounded-lg flex items-center justify-center text-center">
+              <span className="text-white/30 text-[10px] sm:text-xs">Draw Slot</span>
             </div>
           )}
         </AnimatePresence>
@@ -64,7 +64,7 @@ const DrawnCardSlot = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
-          className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-green-400 text-xs whitespace-nowrap"
+          className="absolute -bottom-6 sm:-bottom-8 left-1/2 -translate-x-1/2 text-green-400 text-[10px] sm:text-xs whitespace-nowrap"
         >
           Click to play
         </motion.p>

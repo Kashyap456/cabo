@@ -229,7 +229,7 @@ const GameStatus = () => {
   if (statuses.length === 0) return null
 
   return (
-    <div className="fixed top-4 left-4 z-50 space-y-3">
+    <div className="fixed top-[58%] sm:top-4 left-1/2 sm:left-4 -translate-x-1/2 sm:translate-x-0 z-50 space-y-2 sm:space-y-3 w-[85vw] sm:w-auto max-w-sm">
       <AnimatePresence>
         {statuses.map((status, index) => (
           <motion.div
@@ -243,12 +243,12 @@ const GameStatus = () => {
               damping: 30,
               delay: index * 0.05,
             }}
-            className={`${status.color} border-2 rounded-lg p-4 shadow-xl`}
+            className={`${status.color} border-2 rounded-lg p-3 sm:p-4 shadow-xl`}
           >
-            <h3 className={`font-semibold ${status.titleColor} mb-2`}>
+            <h3 className={`font-semibold text-sm sm:text-base ${status.titleColor} mb-1 sm:mb-2`}>
               {status.title}
             </h3>
-            <p className={status.messageColor}>{status.message}</p>
+            <p className={`text-xs sm:text-sm ${status.messageColor}`}>{status.message}</p>
           </motion.div>
         ))}
       </AnimatePresence>

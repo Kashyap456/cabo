@@ -1,4 +1,8 @@
-import { useGamePlayStore, GamePhase, type StackGiveTarget } from '../../stores/game_play_state'
+import {
+  useGamePlayStore,
+  GamePhase,
+  type StackGiveTarget,
+} from '../../stores/game_play_state'
 import { useAuthStore } from '../../stores/auth'
 import { useGameWebSocket } from '../../api/game_ws'
 import { useCallback, useState, useEffect } from 'react'
@@ -37,19 +41,23 @@ export default function ActionPanel() {
   const canSkip = () => {
     // Can skip during J/Q swap (swap_opponent) or king_swap_phase
     if (specialAction && isMyTurn) {
-      if ((specialAction.type === 'SWAP_CARDS' &&
-           phase === GamePhase.WAITING_FOR_SPECIAL_ACTION) ||
-          phase === GamePhase.KING_SWAP_PHASE) {
+      if (
+        (specialAction.type === 'SWAP_CARDS' &&
+          phase === GamePhase.WAITING_FOR_SPECIAL_ACTION) ||
+        phase === GamePhase.KING_SWAP_PHASE
+      ) {
         return true
       }
     }
-    
+
     // Can also skip during STACK_GIVE_CARD phase if you're the giver
-    if (phase === GamePhase.STACK_GIVE_CARD && 
-        stackGiveTarget?.fromPlayer === sessionId) {
+    if (
+      phase === GamePhase.STACK_GIVE_CARD &&
+      stackGiveTarget?.fromPlayer === sessionId
+    ) {
       return true
     }
-    
+
     return false
   }
 
@@ -105,19 +113,19 @@ export default function ActionPanel() {
 
   return (
     <div
-      className="rounded-lg border-2 border-yellow-600/60 p-3"
+      className="rounded-lg border-2 border-yellow-600/60 p-2 sm:p-3"
       style={{
         background:
           'linear-gradient(180deg, rgba(139, 69, 19, 0.95) 0%, rgba(101, 67, 33, 0.95) 100%)',
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
       }}
     >
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-row sm:flex-col gap-2">
         {/* Action buttons with wood/casino styling */}
         <button
           onClick={handleStack}
           disabled={!canCallStack()}
-          className={`relative px-8 py-2 rounded-lg font-black text-sm tracking-wider transition-all transform ${
+          className={`relative px-4 sm:px-8 py-1.5 sm:py-2 rounded-lg font-black text-xs sm:text-sm tracking-wider transition-all transform ${
             canCallStack()
               ? 'hover:scale-105 hover:-translate-y-0.5'
               : 'cursor-not-allowed opacity-40'
@@ -139,7 +147,7 @@ export default function ActionPanel() {
         <button
           onClick={handleSkip}
           disabled={!canSkip()}
-          className={`relative px-8 py-2 rounded-lg font-black text-sm tracking-wider transition-all transform ${
+          className={`relative px-4 sm:px-8 py-1.5 sm:py-2 rounded-lg font-black text-xs sm:text-sm tracking-wider transition-all transform ${
             canSkip()
               ? 'hover:scale-105 hover:-translate-y-0.5'
               : 'cursor-not-allowed opacity-40'
@@ -163,7 +171,7 @@ export default function ActionPanel() {
         <button
           onClick={handleCabo}
           disabled={!canCallCabo()}
-          className={`relative px-10 py-2 rounded-lg font-black text-sm tracking-wider transition-all transform ${
+          className={`relative px-5 sm:px-10 py-1.5 sm:py-2 rounded-lg font-black text-xs sm:text-sm tracking-wider transition-all transform ${
             canCallCabo()
               ? 'hover:scale-110 hover:-translate-y-0.5 animate-pulse'
               : 'cursor-not-allowed opacity-40'
@@ -179,7 +187,7 @@ export default function ActionPanel() {
             textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
           }}
         >
-          <span className="text-white text-base">CABO!</span>
+          <span className="text-white text-sm sm:text-base">CABO!</span>
           {canCallCabo() && (
             <span className="absolute -top-1 -right-1 flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>

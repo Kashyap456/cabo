@@ -164,7 +164,7 @@ const PlayerGridSpot = ({
         {/* Grid container for cards - 2x3 grid layout */}
         <div
           className={cn(
-            'grid grid-rows-2 gap-2 place-items-center',
+            'grid grid-rows-2 gap-1 sm:gap-2 place-items-center',
             cards.length <= 2 && 'grid-cols-1',
             cards.length > 2 && cards.length <= 4 && 'grid-cols-2',
             cards.length > 4 && 'grid-cols-3',
