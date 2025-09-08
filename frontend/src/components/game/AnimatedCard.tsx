@@ -103,9 +103,9 @@ const AnimatedCard = ({
   }
 
   const cardBack = (
-    <div className="w-full h-full bg-gradient-to-br from-blue-600 to-blue-700 border border-gray-300 rounded-md sm:rounded-lg flex flex-col items-center justify-center shadow-lg">
-      <div className="text-white text-[8px] sm:text-xs font-bold mb-0 sm:mb-1">CABO</div>
-      <div className="text-white text-sm sm:text-2xl">🌴</div>
+    <div className="w-full h-full bg-gradient-to-br from-blue-600 to-blue-700 border border-gray-300 rounded-md lg:rounded-lg flex flex-col items-center justify-center shadow-lg">
+      <div className="text-white text-[8px] lg:text-xs font-bold mb-0 lg:mb-1">CABO</div>
+      <div className="text-white text-sm lg:text-2xl">🌴</div>
     </div>
   )
 
@@ -115,7 +115,7 @@ const AnimatedCard = ({
   const cardFace = (
     <div
       className={cn(
-        'w-8 h-12 sm:w-12 sm:h-18 border border-gray-300 rounded-md sm:rounded-lg flex flex-col items-center justify-center shadow-lg',
+        'w-8 h-12 lg:w-12 lg:h-18 border border-gray-300 rounded-md lg:rounded-lg flex flex-col items-center justify-center shadow-lg',
         // Set background based on whether it's a joker or regular card
         isJoker && suit?.toLowerCase() === 'spades' ? 'bg-black text-white' :
         isJoker && suit?.toLowerCase() === 'hearts' ? 'bg-red-500 text-white' :
@@ -126,11 +126,11 @@ const AnimatedCard = ({
       )}
     >
       {isJoker ? (
-        <div className="text-lg sm:text-4xl">🃏</div>
+        <div className="text-lg lg:text-4xl">🃏</div>
       ) : (
         <>
-          <div className="font-bold text-xs sm:text-xl">{rankDisplay}</div>
-          {suit && <div className="text-sm sm:text-2xl -mt-0 sm:-mt-1">{getSuitSymbol(suit)}</div>}
+          <div className="font-bold text-xs lg:text-xl">{rankDisplay}</div>
+          {suit && <div className="text-sm lg:text-2xl -mt-0 lg:-mt-1">{getSuitSymbol(suit)}</div>}
         </>
       )}
     </div>
@@ -146,7 +146,7 @@ const AnimatedCard = ({
       // Only apply exit animation if there's no layoutId (no FLIP animation)
       exit={cardId ? undefined : { opacity: 0 }}
       className={cn(
-        'w-8 h-12 sm:w-12 sm:h-18 rounded-md sm:rounded-lg', 
+        'w-8 h-12 lg:w-12 lg:h-18 rounded-md lg:rounded-lg', 
         className, 
         isSelectable ? 'cursor-pointer' : 'cursor-default',
         // Add glowing purple ring and pulse animation when being viewed

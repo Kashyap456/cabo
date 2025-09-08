@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 
-export function useIsMobile(breakpoint: number = 768) {
+export function useIsMobile(breakpoint: number = 1024) {
   const [isMobile, setIsMobile] = useState(false)
+  const [isLandscape, setIsLandscape] = useState(false)
 
   useEffect(() => {
-    const checkIsMobile = () => {
+    const checkDevice = () => {
       // Check if it's a touch device or small screen
       const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0
       const isSmallScreen = window.innerWidth < breakpoint || window.innerHeight < 500
@@ -14,20 +15,21 @@ export function useIsMobile(breakpoint: number = 768) {
       const isMobileUserAgent = mobileRegex.test(navigator.userAgent)
       
       setIsMobile((isTouchDevice && isSmallScreen) || isMobileUserAgent)
+      setIsLandscape(window.innerWidth > window.innerHeight)
     }
 
     // Check on mount
-    checkIsMobile()
+    checkDevice()
 
     // Listen for resize and orientation change events
-    window.addEventListener('resize', checkIsMobile)
-    window.addEventListener('orientationchange', checkIsMobile)
+    window.addEventListener('resize', checkDevice)
+    window.addEventListener('orientationchange', checkDevice)
 
     return () => {
-      window.removeEventListener('resize', checkIsMobile)
-      window.removeEventListener('orientationchange', checkIsMobile)
+      window.removeEventListener('resize', checkDevice)
+      window.removeEventListener('orientationchange', checkDevice)
     }
   }, [breakpoint])
 
-  return isMobile
+  return { isMobile, isLandscape }
 }

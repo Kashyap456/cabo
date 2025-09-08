@@ -7,7 +7,11 @@ import { useAuthStore } from '../../stores/auth'
 import { useGameWebSocket } from '../../api/game_ws'
 import { useCallback, useState, useEffect } from 'react'
 
-export default function ActionPanel() {
+interface ActionPanelProps {
+  isMobile?: boolean
+}
+
+export default function ActionPanel({ isMobile = false }: ActionPanelProps) {
   const {
     phase,
     currentPlayerId,
@@ -113,7 +117,7 @@ export default function ActionPanel() {
 
   return (
     <div
-      className="rounded-lg border-2 border-yellow-600/60 p-3"
+      className={`rounded-lg border-2 border-yellow-600/60 ${isMobile ? 'p-1' : 'p-3'}`}
       style={{
         background:
           'linear-gradient(180deg, rgba(139, 69, 19, 0.95) 0%, rgba(101, 67, 33, 0.95) 100%)',
@@ -125,7 +129,7 @@ export default function ActionPanel() {
         <button
           onClick={handleStack}
           disabled={!canCallStack()}
-          className={`relative px-8 py-2 rounded-lg font-black text-sm tracking-wider transition-all transform ${
+          className={`relative ${isMobile ? 'px-3 py-1 text-[10px]' : 'px-8 py-2 text-sm'} rounded-lg font-black tracking-wider transition-all transform ${
             canCallStack()
               ? 'hover:scale-105 hover:-translate-y-0.5'
               : 'cursor-not-allowed opacity-40'
@@ -147,7 +151,7 @@ export default function ActionPanel() {
         <button
           onClick={handleSkip}
           disabled={!canSkip()}
-          className={`relative px-8 py-2 rounded-lg font-black text-sm tracking-wider transition-all transform ${
+          className={`relative ${isMobile ? 'px-3 py-1 text-[10px]' : 'px-8 py-2 text-sm'} rounded-lg font-black tracking-wider transition-all transform ${
             canSkip()
               ? 'hover:scale-105 hover:-translate-y-0.5'
               : 'cursor-not-allowed opacity-40'
@@ -171,7 +175,7 @@ export default function ActionPanel() {
         <button
           onClick={handleCabo}
           disabled={!canCallCabo()}
-          className={`relative px-10 py-2 rounded-lg font-black text-sm tracking-wider transition-all transform ${
+          className={`relative ${isMobile ? 'px-4 py-1 text-[10px]' : 'px-10 py-2 text-sm'} rounded-lg font-black tracking-wider transition-all transform ${
             canCallCabo()
               ? 'hover:scale-110 hover:-translate-y-0.5 animate-pulse'
               : 'cursor-not-allowed opacity-40'
@@ -187,7 +191,7 @@ export default function ActionPanel() {
             textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
           }}
         >
-          <span className="text-white text-base">CABO!</span>
+          <span className={`text-white ${isMobile ? 'text-[11px]' : 'text-base'}`}>CABO!</span>
           {canCallCabo() && (
             <span className="absolute -top-1 -right-1 flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>

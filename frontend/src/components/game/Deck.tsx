@@ -39,7 +39,7 @@ const Deck = ({
   const isDeckSelectable = isCurrentPlayerTurn && gamePhase === GamePhase.DRAW_PHASE && !drawnCard
 
   return (
-    <div className="flex gap-4 sm:gap-8 items-start justify-center">
+    <div className="flex gap-4 lg:gap-8 items-start justify-center">
       {/* Draw deck */}
       {/* Drawn card slot */}
       <DrawnCardSlot
@@ -59,28 +59,28 @@ const Deck = ({
           onClick={onDrawFromDeck}
         >
           {/* All deck cards stacked - needed for FLIP animations */}
-          <div className="relative w-8 h-12 sm:w-12 sm:h-18">
+          <div className="relative w-8 h-12 lg:w-12 lg:h-18">
             <AnimatePresence>
               {deckCardIds.map((cardId, _) => (
                 <AnimatedCard
                   key={cardId}
                   cardId={cardId}
                   isFaceDown={true}
-                  className="absolute inset-0 w-8 h-12 sm:w-12 sm:h-18"
+                  className="absolute inset-0 w-8 h-12 lg:w-12 lg:h-18"
                   animationDelay={0}
                 />
               ))}
             </AnimatePresence>
             {/* Fallback if deck is empty */}
             {deckCardIds.length === 0 && (
-              <div className="w-8 h-12 sm:w-12 sm:h-18 border-2 border-dashed border-white/30 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-12 lg:w-12 lg:h-18 border-2 border-dashed border-white/30 rounded-lg flex items-center justify-center">
                 <span className="text-white/50 text-xs">Empty</span>
               </div>
             )}
           </div>
 
           {/* Deck count */}
-          <div className="absolute -bottom-8 sm:-bottom-10 left-1/2 -translate-x-1/2 text-white text-xs sm:text-sm font-bold">
+          <div className="absolute -bottom-8 lg:-bottom-10 left-1/2 -translate-x-1/2 text-white text-xs lg:text-sm font-bold">
             Deck
           </div>
         </div>
@@ -102,8 +102,8 @@ const Deck = ({
         >
           {/* Empty discard pile placeholder */}
           {discardPile.length === 0 && (
-            <div className="w-8 h-12 sm:w-12 sm:h-18 border-2 border-dashed border-white/30 rounded-lg flex items-center justify-center">
-              <span className="text-white/50 text-[10px] sm:text-xs">Discard</span>
+            <div className="w-8 h-12 lg:w-12 lg:h-18 border-2 border-dashed border-white/30 rounded-lg flex items-center justify-center">
+              <span className="text-white/50 text-[10px] lg:text-xs">Discard</span>
             </div>
           )}
 
@@ -115,7 +115,7 @@ const Deck = ({
               value={topDiscardCard.value}
               suit={topDiscardCard.suit}
               isFaceDown={false}
-              className="w-8 h-12 sm:w-12 sm:h-18"
+              className="w-8 h-12 lg:w-12 lg:h-18"
             />
           )}
         </div>

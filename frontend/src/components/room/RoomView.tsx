@@ -43,8 +43,8 @@ export default function RoomView() {
   // Special action handler for game
   useSpecialActionHandler()
   
-  // Check if we're on mobile
-  const isMobile = useIsMobile()
+  // Check if we're on mobile and orientation
+  const { isMobile, isLandscape } = useIsMobile()
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -252,10 +252,11 @@ export default function RoomView() {
         )}
         
         {/* Game status - show in top left during game (but not endgame) */}
-        {/* On mobile, position below deck during gameplay */}
-        {isInGame && !isEndGame && <GameStatus isMobile={isMobile} />}
+        {/* On mobile portrait, position below deck; on landscape, keep top left */}
+        {isInGame && !isEndGame && <GameStatus isMobile={isMobile} isLandscape={isLandscape} />}
 
-        {/* Room info display - always visible */}
+        {/* Room info display - hide during gameplay */}
+        {!isInGame && (
         <div className="fixed top-4 right-4 z-20">
           <div
             className="border-4 border-yellow-500/80 px-4 py-3 rounded-lg shadow-wood-deep"
@@ -286,6 +287,7 @@ export default function RoomView() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Players positioned around the table */}
         <div className="absolute inset-0">
@@ -308,7 +310,7 @@ export default function RoomView() {
                 position={positions[index]}
                 tableDimensions={tableDimensions}
                 isMobile={isMobile}
-                showActionPanel={isMobile && player.id === sessionId && isInGame && !isEndGame}
+                showActionPanel={isMobile && !isLandscape && player.id === sessionId && isInGame && !isEndGame}
                 cards={cards.map((card: any, cardIndex: number) => ({
                   id: card.id, // Pass through the card ID for animations
                   value: isEndGame || isCardVisible(player.id, cardIndex, card)
@@ -534,10 +536,10 @@ export default function RoomView() {
           </AnimatePresence>
         </div>
 
-        {/* Action Panel - bottom right corner on desktop only (mobile integrates into badge) */}
-        {!isMobile && isInGame && !isEndGame && currentPlayer && (
+        {/* Action Panel - bottom right corner on desktop and mobile landscape */}
+        {(!isMobile || (isMobile && isLandscape)) && isInGame && !isEndGame && currentPlayer && (
           <div className="fixed bottom-4 right-4 z-10">
-            <ActionPanel />
+            <ActionPanel isMobile={isMobile} />
           </div>
         )}
       </LayoutGroup>

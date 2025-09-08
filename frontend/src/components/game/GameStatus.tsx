@@ -4,9 +4,10 @@ import { useAuthStore } from '@/stores/auth'
 
 interface GameStatusProps {
   isMobile?: boolean
+  isLandscape?: boolean
 }
 
-const GameStatus = ({ isMobile = false }: GameStatusProps) => {
+const GameStatus = ({ isMobile = false, isLandscape = false }: GameStatusProps) => {
   const {
     phase,
     specialAction,
@@ -233,9 +234,10 @@ const GameStatus = ({ isMobile = false }: GameStatusProps) => {
   if (statuses.length === 0) return null
 
   return (
-    <div className={isMobile 
-      ? "absolute left-1/2 top-1/2 -translate-x-1/2 translate-y-16 z-50 space-y-2 w-[80vw] max-w-xs"
-      : "fixed top-4 left-4 z-50 space-y-3"
+    <div className={
+      isMobile && !isLandscape
+        ? "absolute left-1/2 top-1/2 -translate-x-1/2 translate-y-20 z-50 space-y-1 max-w-[180px]"
+        : "fixed top-4 left-4 z-50 space-y-2 max-w-xs"
     }>
       <AnimatePresence>
         {statuses.map((status, index) => (
@@ -255,7 +257,7 @@ const GameStatus = ({ isMobile = false }: GameStatusProps) => {
             <h3 className={`font-semibold ${isMobile ? 'text-xs' : 'text-base'} ${status.titleColor} ${isMobile ? 'mb-1' : 'mb-2'}`}>
               {status.title}
             </h3>
-            {!isMobile && <p className={status.messageColor}>{status.message}</p>}
+            {!isMobile && <p className={`${status.messageColor} text-sm`}>{status.message}</p>}
           </motion.div>
         ))}
       </AnimatePresence>
