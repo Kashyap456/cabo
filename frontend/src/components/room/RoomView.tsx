@@ -7,6 +7,7 @@ import { useGamePlayStore, GamePhase } from '@/stores/game_play_state'
 import { useGameWebSocket } from '@/api/game_ws'
 import { useSpecialActionHandler } from '@/hooks/useSpecialActionHandler'
 import { useCardVisibility } from '@/hooks/useCardVisibility'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import GameTable from '../game/GameTable'
 import PlayerGridSpot from '../game/PlayerGridSpot'
 import Deck from '../game/Deck'
@@ -41,6 +42,9 @@ export default function RoomView() {
 
   // Special action handler for game
   useSpecialActionHandler()
+  
+  // Check if we're on mobile
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -223,6 +227,7 @@ export default function RoomView() {
     }
   }
 
+  // Use the same layout for both mobile and desktop
   return (
     <GameTable showPositionGuides={false} data-table-container>
       <NicknameModal
@@ -248,13 +253,10 @@ export default function RoomView() {
         
         {/* Game status - show in top left during game (but not endgame) */}
         {/* On mobile, position below deck during gameplay */}
-        {isInGame && !isEndGame && <GameStatus />}
+        {isInGame && !isEndGame && <GameStatus isMobile={isMobile} />}
 
-        {/* Room info display - hidden on mobile during playing/endgame phases */}
-        <div className={cn(
-          "fixed top-4 right-4 z-20",
-          isInGame && "hidden sm:block"
-        )}>
+        {/* Room info display - always visible */}
+        <div className="fixed top-4 right-4 z-20">
           <div
             className="border-4 border-yellow-500/80 px-4 py-3 rounded-lg shadow-wood-deep"
             style={{
@@ -305,6 +307,8 @@ export default function RoomView() {
                 isEndGame={isEndGame}
                 position={positions[index]}
                 tableDimensions={tableDimensions}
+                isMobile={isMobile}
+                showActionPanel={isMobile && player.id === sessionId && isInGame && !isEndGame}
                 cards={cards.map((card: any, cardIndex: number) => ({
                   id: card.id, // Pass through the card ID for animations
                   value: isEndGame || isCardVisible(player.id, cardIndex, card)
@@ -530,9 +534,9 @@ export default function RoomView() {
           </AnimatePresence>
         </div>
 
-        {/* Action Panel - bottom right corner on desktop, repositioned on mobile */}
-        {isInGame && !isEndGame && currentPlayer && (
-          <div className="fixed sm:bottom-4 sm:right-4 bottom-20 left-1/2 sm:left-auto -translate-x-1/2 sm:translate-x-0 z-10">
+        {/* Action Panel - bottom right corner on desktop only (mobile integrates into badge) */}
+        {!isMobile && isInGame && !isEndGame && currentPlayer && (
+          <div className="fixed bottom-4 right-4 z-10">
             <ActionPanel />
           </div>
         )}

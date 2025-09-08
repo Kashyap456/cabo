@@ -1,6 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import AnimatedCard from './AnimatedCard'
 import { cn } from '@/lib/utils'
+import { useGamePlayStore, GamePhase } from '@/stores/game_play_state'
+import { useGameWebSocket } from '@/api/game_ws'
+import { useAuthStore } from '@/stores/auth'
 
 interface PlayerGridSpotProps {
   playerId: string
@@ -32,6 +35,8 @@ interface PlayerGridSpotProps {
   tableDimensions: { width: number; height: number }
   className?: string
   onCardClick?: (cardIndex: number) => void
+  isMobile?: boolean
+  showActionPanel?: boolean
 }
 
 // Cards are laid out in a 2-column flexbox that wraps
@@ -51,10 +56,54 @@ const PlayerGridSpot = ({
   tableDimensions,
   className,
   onCardClick,
+  isMobile = false,
+  showActionPanel = false,
 }: PlayerGridSpotProps) => {
   const { width: tableWidth, height: tableHeight } = tableDimensions
   const centerX = tableWidth / 2
   const centerY = tableHeight / 2
+  
+  // For mobile action buttons
+  const gamePlayState = useGamePlayStore()
+  const { sendMessage } = useGameWebSocket()
+  const { sessionId } = useAuthStore()
+  const gamePhase = gamePlayState.phase
+  
+  // Action button helpers
+  const canCallStack = () => {
+    return (
+      (gamePhase === GamePhase.TURN_TRANSITION ||
+        gamePhase === GamePhase.WAITING_FOR_SPECIAL_ACTION ||
+        gamePhase === GamePhase.KING_VIEW_PHASE ||
+        gamePhase === GamePhase.KING_SWAP_PHASE) &&
+      gamePhase !== GamePhase.STACK_TURN_TRANSITION &&
+      !gamePlayState.stackCaller
+    )
+  }
+
+  const canSkip = () => {
+    if (gamePlayState.specialAction && isTurn) {
+      if ((gamePlayState.specialAction.type === 'SWAP_CARDS' &&
+           gamePhase === GamePhase.WAITING_FOR_SPECIAL_ACTION) ||
+          gamePhase === GamePhase.KING_SWAP_PHASE) {
+        return true
+      }
+    }
+    if (gamePhase === GamePhase.STACK_GIVE_CARD && 
+        gamePlayState.stackGiveTarget?.fromPlayer === sessionId) {
+      return true
+    }
+    return false
+  }
+
+  const canCallCabo = () => {
+    return (
+      isTurn &&
+      gamePhase === GamePhase.DRAW_PHASE &&
+      !gamePlayState.drawnCard &&
+      !gamePlayState.players.some((p) => p.hasCalledCabo)
+    )
+  }
 
   // Use provided badge and card positions
   const cardX = position.cardX || position.x
@@ -144,6 +193,55 @@ const PlayerGridSpot = ({
               <div className="text-center">
                 <span className="text-lg font-black">{score}</span>
                 <span className="text-xs ml-1 opacity-75">pts</span>
+              </div>
+            )}
+            {/* Mobile action buttons integrated into badge */}
+            {showActionPanel && (
+              <div className="flex gap-1 mt-1">
+                <button
+                  onClick={() => sendMessage({ type: 'call_stack' })}
+                  disabled={!canCallStack()}
+                  className={cn(
+                    "px-2 py-0.5 rounded text-[9px] font-bold transition-all",
+                    canCallStack() 
+                      ? "bg-orange-600 text-white active:scale-95" 
+                      : "bg-gray-600/50 text-gray-400"
+                  )}
+                >
+                  STK
+                </button>
+                <button
+                  onClick={() => {
+                    if (gamePhase === GamePhase.STACK_GIVE_CARD) {
+                      sendMessage({ type: 'skip_give_stack_card' })
+                    } else if (gamePhase === GamePhase.KING_SWAP_PHASE) {
+                      sendMessage({ type: 'king_skip_swap' })
+                    } else if (gamePlayState.specialAction?.type === 'SWAP_CARDS') {
+                      sendMessage({ type: 'skip_swap' })
+                    }
+                  }}
+                  disabled={!canSkip()}
+                  className={cn(
+                    "px-2 py-0.5 rounded text-[9px] font-bold transition-all",
+                    canSkip() 
+                      ? "bg-yellow-600 text-white active:scale-95" 
+                      : "bg-gray-600/50 text-gray-400"
+                  )}
+                >
+                  SKP
+                </button>
+                <button
+                  onClick={() => sendMessage({ type: 'call_cabo' })}
+                  disabled={!canCallCabo()}
+                  className={cn(
+                    "px-2 py-0.5 rounded text-[9px] font-bold transition-all",
+                    canCallCabo() 
+                      ? "bg-red-600 text-white animate-pulse active:scale-95" 
+                      : "bg-gray-600/50 text-gray-400"
+                  )}
+                >
+                  CABO
+                </button>
               </div>
             )}
           </div>
